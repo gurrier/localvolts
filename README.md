@@ -1,7 +1,7 @@
 # localvolts_hass
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
-The key sensor exposed is the current cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
+The key sensor exposed, costsFlexUp, is the current cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
 It's essentially the marginal cost of electricity for you and incldues loss factors and network fees involved in increasing your consumption by 1kW now.
 Of course, this only lasts until then end of the 5 minute interval, during which you would only have pulled 1kW for 5 minutes = 1/12 kWh = 0.083kWh
 
