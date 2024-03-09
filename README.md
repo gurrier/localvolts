@@ -26,12 +26,11 @@ If you already have HACS installed for Home Assistant you can try adding this as
 
 In HACS
 
-1. Go to any of the sections (integrations, frontend, automation).
-2. Click on the 3 dots in the top right corner.
-3. Select "Custom repositories"
-4. Add the URL to the repository. https://github.com/gurrier/localvolts
-5. Select the integration category.
-6. Click the "ADD" button.
+1. Click on the 3 dots in the top right corner.
+2. Select "Custom repositories"
+3. Add the URL to the repository. https://github.com/gurrier/localvolts
+4. Select the integration category.
+5. Click the "ADD" button.
 
 Now you can browse for and install Localvolts in Home Assistant using HACS
 
