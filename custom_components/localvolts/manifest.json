@@ -7,7 +7,7 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "dependencies": [],
-  "codeowners": [@gurrier],
+  "codeowners": ["@gurrier"],
   "requirements": ["requests>=2.25.1"],
   "version": "0.1.0"
 }
