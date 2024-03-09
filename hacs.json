@@ -3,5 +3,6 @@
   "documentation": "https://github.com/gurrier/localvolts",
   "version": "0.1.0",
   "render_readme": true,
+  "content_in_root": false,
   "category": "integration"
 }
