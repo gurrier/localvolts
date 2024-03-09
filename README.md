@@ -10,19 +10,21 @@ https://localvolts.com/localvolts-api/
 
 Then in Home Assistant, create a new folder called "localvolts" under the "custom_components" folder, and copy all of the files in this project into that folder.
 
-"__init__.py"
+"\_\_init\_\_.py"
+
 "manifest.json"
+
 "sensor.py"
 
-Next edit the file /homeassistant/configuration.yaml and insert the lines below using your own values for each of the three entries
-
+Next edit the file `/homeassistant/configuration.yaml` and insert the lines below using your own values for each of the three entries
+```
 localvolts:
   api_key: "abc123abc123abc123abc123abc123ab"
   partner_id: "12345"
   nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
-
+```
 
 You may need to restart Home Assistant to get it working.
-Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked
+Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked.
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur with Localvolts
