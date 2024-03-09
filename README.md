@@ -8,9 +8,7 @@ Of course, this only lasts until the end of the 5 minute interval, during which 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
-Then in Home Assistant, copy the localvolts subfolder of custom_components in this repository into your existing Home Assistant's custom_components folder.
-
-Next edit the file `/homeassistant/configuration.yaml` and insert the lines below using your own values for each of the three entries
+Use this onformation when editing `/homeassistant/configuration.yaml` to insert these lines below for your own values
 ```
 localvolts:
   api_key: "abc123abc123abc123abc123abc123ab"
@@ -18,7 +16,27 @@ localvolts:
   nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
 ```
 
-You may need to restart Home Assistant to get it working.
+# Manual method to get the integration installed in Home Assistant
+
+In Home Assistant, copy the files in this repository into your existing Home Assistant's custom_components folder.
+
+# Alternative method using HACS to install the Localvolts Integration
+(Don't forget to make the changes to `/homeassistant/configuration.yaml`)
+
+If you already have HACS installed for Home Asisstant you can try adding this as a custom repository
+
+In HACS
+
+1. Go to any of the sections (integrations, frontend, automation).
+2. Click on the 3 dots in the top right corner.
+3. Select "Custom repositories"
+4. Add the URL to the repository. https://github.com/gurrier/localvolts
+5. Select the integration category.
+6. Click the "ADD" button.
+
+Now you can browse for and install Localvolts in HACS
+
+You will need to restart Home Assistant to get the integration working.
 Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked.
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur with Localvolts
