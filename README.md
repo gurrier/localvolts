@@ -22,7 +22,7 @@ In Home Assistant, copy the files in this repository into your existing Home Ass
 
 # Alternative method using HACS to install the Localvolts Integration
 
-If you already have HACS installed for Home Asisstant you can try adding this as a custom repository
+If you already have HACS installed for Home Assistant you can try adding this as a custom repository
 
 In HACS
 
