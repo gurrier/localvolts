@@ -2,20 +2,19 @@
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
 The key sensor exposed, costsFlexUp, is the current cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
-It's essentially the marginal cost of electricity for you and incldues loss factors and network fees involved in increasing your consumption by 1kW now.
-Of course, this only lasts until then end of the 5 minute interval, during which you would only have pulled 1kW for 5 minutes = 1/12 kWh = 0.083kWh
+It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
+Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.08 3kWh
 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer and request an API key using this form
 https://localvolts.com/localvolts-api/
 
-Then in homeassistant under the custom_components fodler, create a folder called "localvolts" and copy all of the files here into that folder.
+Then in Home Assistant, create a new folder called "localvolts" under the "custom_components" folder, and copy all of the files in this project into that folder.
+
 __init__.py
 manifest.json
 sensor.py
 
-Edit the file /homeassistant/configuration.yaml
-
-Insert the lines below using your own values for each of the three entries
+Next edit the file /homeassistant/configuration.yaml and insert the lines below using your own values for each of the three entries
 
 localvolts:
   api_key: "abc123abc123abc123abc123abc123ab"
@@ -23,7 +22,7 @@ localvolts:
   nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
 
 
-You may need to restart Home Asistant to get it working.
-Look for a new sensor named "sensor.costsFlexUp"
+You may need to restart Home Assistant to get it working.
+Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked
 
-You can create actions that orchestrate your smart appliances now knowing what electricity cost you will incur with Localvolts
+Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur with Localvolts
