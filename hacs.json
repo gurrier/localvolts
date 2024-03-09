@@ -1,6 +1,5 @@
 {
   "name": "Localvolts Integration",
-  "content_in_root": true,
   "documentation": "https://github.com/gurrier/localvolts",
   "version": "0.1.0",
   "category": "integration"
