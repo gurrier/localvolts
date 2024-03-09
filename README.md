@@ -10,9 +10,9 @@ https://localvolts.com/localvolts-api/
 
 Then in Home Assistant, create a new folder called "localvolts" under the "custom_components" folder, and copy all of the files in this project into that folder.
 
-__init__.py
-manifest.json
-sensor.py
+"__init__.py"
+"manifest.json"
+"sensor.py"
 
 Next edit the file /homeassistant/configuration.yaml and insert the lines below using your own values for each of the three entries
 
