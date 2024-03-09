@@ -1,0 +1,5 @@
+{
+    "name": "Localvolts Integration",
+    "homeassistant": "0.106.0",
+    "render_readme": true
+}
