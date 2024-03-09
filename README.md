@@ -33,7 +33,7 @@ In HACS
 5. Select the integration category.
 6. Click the "ADD" button.
 
-Now you can browse for and install Localvolts in HACS
+Now you can browse for and install Localvolts in Home Assistant using HACS
 
 You will need to restart Home Assistant to get the integration working.
 Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked.
