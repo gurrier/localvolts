@@ -21,7 +21,6 @@ localvolts:
 In Home Assistant, copy the files in this repository into your existing Home Assistant's custom_components folder.
 
 # Alternative method using HACS to install the Localvolts Integration
-(Don't forget to make the changes to `/homeassistant/configuration.yaml`)
 
 If you already have HACS installed for Home Asisstant you can try adding this as a custom repository
 
