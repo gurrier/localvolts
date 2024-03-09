@@ -1,4 +1,4 @@
-# localvolts_hass
+# localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
 The key sensor exposed, costsFlexUp, is the current cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
