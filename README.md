@@ -8,13 +8,7 @@ Of course, this only lasts until the end of the 5 minute interval, during which 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer and request an API key using this form
 https://localvolts.com/localvolts-api/
 
-Then in Home Assistant, create a new folder called "localvolts" under the "custom_components" folder, and copy all of the files in this project into that folder.
-
-"\_\_init\_\_.py"
-
-"manifest.json"
-
-"sensor.py"
+Then in Home Assistant, copy the localvolts subfolder of custom_components in this repository into your existing Home Assistant's custom_components folder.
 
 Next edit the file `/homeassistant/configuration.yaml` and insert the lines below using your own values for each of the three entries
 ```
