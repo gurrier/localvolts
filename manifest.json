@@ -2,7 +2,7 @@
 {
   "domain": "localvolts",
   "name": "LocalVolts Integration",
-  "documentation": "https://www.example.com",
+  "documentation": "https://github.com/gurrier/localvolts",
   "dependencies": [],
   "codeowners": [],
   "requirements": ["requests>=2.25.1"],
