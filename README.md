@@ -8,7 +8,7 @@ Of course, this only lasts until the end of the 5 minute interval, during which 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
-Use this onformation when editing `/homeassistant/configuration.yaml` to insert these lines below for your own values
+Use this information when editing `/homeassistant/configuration.yaml` to insert these lines below for your own values
 ```
 localvolts:
   api_key: "abc123abc123abc123abc123abc123ab"
