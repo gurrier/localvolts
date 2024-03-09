@@ -22,3 +22,7 @@ You may need to restart Home Assistant to get it working.
 Look for a new sensor named "sensor.costsFlexUp" in Home Assistant to verify it worked.
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur with Localvolts
+
+<!-- HIDDEN until ready on HACS
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=%40gurrier&repository=localvolts&category=integration)
+-->
