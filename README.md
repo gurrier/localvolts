@@ -1,12 +1,12 @@
-# localvolts
+# Localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
 The key sensor exposed, costsFlexUp, is the current cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
-To use this integration in Home Assistant, it is necessary to join Localvolts as a customer and request an API key using this form
-https://localvolts.com/localvolts-api/
+To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
+and request an API key using this form https://localvolts.com/localvolts-api/
 
 Then in Home Assistant, copy the localvolts subfolder of custom_components in this repository into your existing Home Assistant's custom_components folder.
 
