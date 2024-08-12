@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import requests
-#from datetime import datetime
 import datetime
-from datetime import timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -42,17 +40,15 @@ def setup_platform(
         return
 
 
-    # Add sensor entity to Home Assistant
-    add_entities([LocalvoltsSensor(api_key, partner_id, nmi_id)])
+    # Add both sensor entities to Home Assistant
+    add_entities([
+        LocalvoltsCostsFlexUpSensor(api_key, partner_id, nmi_id),
+        LocalvoltsEarningsFlexUpSensor(api_key, partner_id, nmi_id)
+    ])
 
 
 class LocalvoltsSensor(SensorEntity):
-    """Representation of a Sensor."""
-
-    _attr_name = "costsFlexUp"
-    _attr_native_unit_of_measurement = "$/kWh" #UnitOfTemperature.CELSIUS
-    _attr_device_class = SensorDeviceClass.MONETARY
-    #_attr_state_class = SensorStateClass.MEASUREMENT
+    """Representation of a Localvolts Sensor."""
 
     def __init__(self, api_key, partner_id, nmi_id):
         """Initialize the sensor."""
@@ -60,23 +56,7 @@ class LocalvoltsSensor(SensorEntity):
         self.partner_id = partner_id
         self.nmi_id = nmi_id
         self.last_interval = None
-
-    @property
-    def EarningsFlexUp(self) -> str | None:
-        return "earninsgFlexUpValue"
-
-    @property
-    def unique_id(self):
-        # Example: using partnerID as unique ID
-        return f"localvolts_sensor_{self.partner_id}"
-
-
-    @property
-    def state_attributes(self):
-        """Return the state attributes of the sensor."""
-        attributes = super().state_attributes or {}
-        attributes["earnings_flex_up"] = self.EarningsFlexUp
-        return attributes
+        self._attr_native_value = None
 
     def update(self) -> None:
         """Fetch new state data for the sensor.
@@ -104,7 +84,7 @@ class LocalvoltsSensor(SensorEntity):
             #First time through the loop, or else it is the first time running in a new 5min interval 
             _LOGGER.debug("New interval so retrieve the latest costsFlexUp")
             url = "https://api.localvolts.com/v1/customer/interval?NMI=" + self.nmi_id + "&from=" + from_time + "&to=" + to_time
-            
+            #url = f"https://api.localvolts.com/v1/customer/interval?NMI={self.nmi_id}&from={from_time}&to={to_time}"
             headers = {
                 "Authorization": "apikey " + self.api_key,
                 "partner": "" + self.partner_id 
@@ -112,30 +92,63 @@ class LocalvoltsSensor(SensorEntity):
             
             response = requests.get(url, headers=headers)
             
-            # Optional: If the response is JSON, you can convert it to a Python dictionary:
-            data = response.json()
-            
-            # Now, extract the 'costsFlexUp' field from the data
-            
-            for item in data:
+            if response.status_code == 200:
 
-                quality = item['quality'].lower()
-                _LOGGER.debug("quality = %s", quality)
-                
-                
-                # Check the 'quality' field
-                if quality == 'exp':
-                    self.last_interval = item['intervalEnd']
-                    _LOGGER.debug("intervalEnd = %s", self.last_interval)
-                    new_value = round(item['costsFlexUp'] / 100, 2)
-                    # Update the value if it's different
-                    if self._attr_native_value != new_value:
-                        self._attr_native_value = new_value
-                    _LOGGER.debug("costsFlexUp = %s", self._attr_native_value)
-                else:
-                    _LOGGER.debug("Skipping forecast quality data.  Only exp will do.")
-    #            self._attr_native_value = round(item['costsFlexUp'] / 100, 2)
+            # Process data
+            # The response is JSON, you can convert it to a Python dictionary:
+                data = response.json()
+    
+                for item in data:
+    
+                    # Check the 'quality' field
+                    if item['quality'].lower() == 'exp':
+                        self.last_interval = item['intervalEnd']
+                        _LOGGER.debug("intervalEnd = %s", self.last_interval)
+                        self.process_data(item)
+                    else:
+                        _LOGGER.debug("Skipping forecast quality data.  Only exp will do.")
+            else:
+                _LOGGER.error("Failed to fetch data from localvolts API, status code: %s", response.status_code)
                 
         else:
-            _LOGGER.debug("costsFlexUp did not change.  Still in same interval.")
+            _LOGGER.debug("Data did not change.  Still in same interval.")
 
+    def process_data(self, item):
+        """Process the fetched data. To be implemented by subclasses."""
+        raise NotImplementedError
+
+class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
+    """Sensor for monitoring costsFlexUp."""
+
+    _attr_name = "costsFlexUp"
+    _attr_native_unit_of_measurement = "$/kWh"
+    _attr_device_class = SensorDeviceClass.MONETARY
+
+    def process_data(self, item):
+        """Process the costsFlexUp data."""
+        new_value = round(item['costsFlexUp'] / 100, 2)
+        if self._attr_native_value != new_value:
+            self._attr_native_value = new_value
+        _LOGGER.debug("costsFlexUp = %s", self._attr_native_value)
+
+
+class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
+    """Sensor for monitoring earningsFlexUp."""
+
+    _attr_name = "earningsFlexUp"
+    _attr_native_unit_of_measurement = "$/kWh"
+    _attr_device_class = SensorDeviceClass.MONETARY
+
+    def process_data(self, item):
+        """Process the earningsFlexUp data."""
+        new_value = round(item['earningsFlexUp'] / 100, 2)
+        if self._attr_native_value != new_value:
+            self._attr_native_value = new_value
+        _LOGGER.debug("earningsFlexUp = %s", self._attr_native_value)
+
+    @property
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        return {
+            "last_interval": self.last_interval,
+        }
