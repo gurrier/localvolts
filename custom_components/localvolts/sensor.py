@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import requests
 import datetime
+from datetime import timedelta
+from homeassistant.util import Throttle
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -20,6 +22,7 @@ import logging
 DOMAIN = "localvolts"
 _LOGGER = logging.getLogger(__name__)
 
+SCAN_INTERVAL = timedelta(seconds=15)  # Update every 15 seconds
 
 def setup_platform(
     hass: HomeAssistant,
@@ -58,6 +61,7 @@ class LocalvoltsSensor(SensorEntity):
         self.last_interval = None
         self._attr_native_value = None
 
+    @Throttle(SCAN_INTERVAL)
     def update(self) -> None:
         """Fetch new state data for the sensor.
 
