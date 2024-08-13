@@ -82,7 +82,7 @@ class LocalvoltsSensor(SensorEntity):
         #if (self.last_interval is None) or (from_time > self.last_interval + timedelta(seconds=15)):
         if (self.last_interval is None) or (from_time > self.last_interval):
             #First time through the loop, or else it is the first time running in a new 5min interval 
-            _LOGGER.debug("New interval so retrieve the latest costsFlexUp")
+            _LOGGER.debug("New interval so retrieve the latest data")
             url = "https://api.localvolts.com/v1/customer/interval?NMI=" + self.nmi_id + "&from=" + from_time + "&to=" + to_time
             #url = f"https://api.localvolts.com/v1/customer/interval?NMI={self.nmi_id}&from={from_time}&to={to_time}"
             headers = {
@@ -108,7 +108,7 @@ class LocalvoltsSensor(SensorEntity):
                     else:
                         _LOGGER.debug("Skipping forecast quality data.  Only exp will do.")
             else:
-                _LOGGER.error("Failed to fetch data from localvolts API, status code: %s", response.status_code)
+                _LOGGER.error("Failed to fetch data from localvolts API, will try again soon, status code: %s", response.status_code)
                 
         else:
             _LOGGER.debug("Data did not change.  Still in same interval.")
@@ -127,10 +127,16 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
     def process_data(self, item):
         """Process the costsFlexUp data."""
         new_value = round(item['costsFlexUp'] / 100, 2)
-        if self._attr_native_value != new_value:
-            self._attr_native_value = new_value
+        #if self._attr_native_value != new_value:
+        self._attr_native_value = new_value
         _LOGGER.debug("costsFlexUp = %s", self._attr_native_value)
 
+    @property
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        return {
+            "last_interval": self.last_interval,
+        }
 
 class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
     """Sensor for monitoring earningsFlexUp."""
@@ -142,8 +148,8 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
     def process_data(self, item):
         """Process the earningsFlexUp data."""
         new_value = round(item['earningsFlexUp'] / 100, 2)
-        if self._attr_native_value != new_value:
-            self._attr_native_value = new_value
+        #if self._attr_native_value != new_value:
+        self._attr_native_value = new_value
         _LOGGER.debug("earningsFlexUp = %s", self._attr_native_value)
 
     @property
