@@ -58,7 +58,8 @@ class LocalvoltsSensor(SensorEntity):
         self.api_key = api_key
         self.partner_id = partner_id
         self.nmi_id = nmi_id
-        self.last_interval = None
+        self.intervalEnd = None
+        self.lastUpdate = None
         self._attr_native_value = None
 
     @Throttle(SCAN_INTERVAL)
@@ -77,14 +78,15 @@ class LocalvoltsSensor(SensorEntity):
         duration_minutes_later = current_utc_time + datetime.timedelta(minutes=5)
         to_time = duration_minutes_later.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        _LOGGER.debug("intervalEnd = %s", self.last_interval)
+        _LOGGER.debug("intervalEnd = %s", self.intervalEnd)
+        _LOGGER.debug("lastUpdate = %s", self.lastUpdate)
         _LOGGER.debug("from_time = %s", from_time)
         _LOGGER.debug("to_time = %s", to_time)
 
-        #The first condition will be evaluated and, if true, the second condition will not need to be evaluated (handy because it would cause an error if last_interval is none)
+        #The first condition will be evaluated and, if true, the second condition will not need to be evaluated (handy because it would cause an error if intervalEnd is none)
         #The data will not be updated until about 20-30 seconds after the start of the interval so let's introduce a small timedelata sicne we know it won't be faster than 15 seconds in practice
-        #if (self.last_interval is None) or (from_time > self.last_interval + timedelta(seconds=15)):
-        if (self.last_interval is None) or (from_time > self.last_interval):
+        #if (self.intervalEnd is None) or (from_time > self.intervalEnd + timedelta(seconds=15)):
+        if (self.intervalEnd is None) or (from_time > self.intervalEnd):
             #First time through the loop, or else it is the first time running in a new 5min interval 
             _LOGGER.debug("New interval so retrieve the latest data")
             url = "https://api.localvolts.com/v1/customer/interval?NMI=" + self.nmi_id + "&from=" + from_time + "&to=" + to_time
@@ -106,8 +108,10 @@ class LocalvoltsSensor(SensorEntity):
     
                     # Check the 'quality' field
                     if item['quality'].lower() == 'exp':
-                        self.last_interval = item['intervalEnd']
-                        _LOGGER.debug("intervalEnd = %s", self.last_interval)
+                        self.intervalEnd = item['intervalEnd']
+                        _LOGGER.debug("intervalEnd = %s", self.intervalEnd)
+                        self.lastUpdate = item['lastUpdate']
+                        _LOGGER.debug("lastUpdate = %s", self.lastUpdate)
                         self.process_data(item)
                     else:
                         _LOGGER.debug("Skipping forecast quality data.  Only exp will do.")
@@ -139,8 +143,10 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
     def extra_state_attributes(self):
         """Return additional state attributes."""
         return {
-            "last_interval": self.last_interval,
+            "intervalEnd": self.intervalEnd,
+            "lastUpdate": self.lastUpdate,
         }
+
 
 class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
     """Sensor for monitoring earningsFlexUp."""
@@ -160,5 +166,6 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
     def extra_state_attributes(self):
         """Return additional state attributes."""
         return {
-            "last_interval": self.last_interval,
+            "intervalEnd": self.intervalEnd,
+            "lastUpdate": self.lastUpdate,
         }
