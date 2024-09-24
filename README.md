@@ -9,7 +9,19 @@ Of course, this only lasts until the end of the 5 minute interval, during which 
 
 2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
+Note: for convenience, there is also an attribute to show the lag into the current 5 minute interval that the latest data was retrieved.
+You can use it, for example, to create a sensor to see how quickly Localvolts are delivering the data to you
 
+Add to your configuration.yaml...and pay attention to the indentation
+```
+  - platform: template
+    sensors
+      localvolts_lag_seconds:
+        friendly_name: "Localvolts Lag Seconds"
+        value_template: "{{ state_attr('sensor.costsflexup', 'time_past_start') }}"
+        unit_of_measurement: "seconds"
+        icon_template: "mdi:clock-outline"
+```
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
