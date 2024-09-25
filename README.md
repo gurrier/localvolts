@@ -39,7 +39,7 @@ Now you can browse for and install Localvolts in Home Assistant using HACS
 
 In Home Assistant, copy the files in this repository into a subfolder of your existing Home Assistant's custom_components folder.
 
-
+# Restart Home Asisistant
 In either case, you will need to restart Home Assistant to get the integration working.
 Look for two sensors named "sensor.costsFlexUp" and "sensor.earningsFlexUp" in Home Assistant to verify it worked.
 
@@ -47,7 +47,8 @@ Look for two sensors named "sensor.costsFlexUp" and "sensor.earningsFlexUp" in H
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
 
 
-Additional note: for convenience, there is also an attribute to show the lag into the current 5 minute interval that the latest data was retrieved.
+# Additional note: 
+For convenience, there is also an attribute to show the lag into the current 5 minute interval that the latest data was retrieved.
 You can use it, for example, to create a sensor to see how quickly Localvolts are delivering the data to you
 
 Add to your configuration.yaml...and pay attention to the indentation
