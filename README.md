@@ -39,7 +39,7 @@ Now you can browse for and install Localvolts in Home Assistant using HACS
 
 In Home Assistant, copy the files in this repository into a subfolder of your existing Home Assistant's custom_components folder.
 
-# Restart Home Asisistant
+# Restart Home Assistant
 In either case, you will need to restart Home Assistant to get the integration working.
 Look for two sensors named "sensor.costsFlexUp" and "sensor.earningsFlexUp" in Home Assistant to verify it worked.
 
