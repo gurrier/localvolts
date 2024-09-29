@@ -1,13 +1,15 @@
 # Localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
-The integration exposes two sensors...
+The integration exposes three sensors...
 
 1) costsFlexUp is the current IMPORT cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
 2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
+
+3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
@@ -46,21 +48,6 @@ Look for two sensors named "sensor.costsFlexUp" and "sensor.earningsFlexUp" in H
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
 
-
-# Additional note: 
-For convenience, there is also an attribute to show the lag into the current 5 minute interval that the latest data was retrieved.
-You can use it, for example, to create a sensor to see how quickly Localvolts are delivering the data to you
-
-Add to your configuration.yaml...and pay attention to the indentation
-```
-  - platform: template
-    sensors
-      localvolts_lag_seconds:
-        friendly_name: "Localvolts Lag Seconds"
-        value_template: "{{ state_attr('sensor.costsflexup', 'time_past_start') }}"
-        unit_of_measurement: "seconds"
-        icon_template: "mdi:clock-outline"
-```
 
 <!-- HIDDEN until ready on HACS
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=%40gurrier&repository=localvolts&category=integration)
