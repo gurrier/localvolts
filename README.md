@@ -14,14 +14,6 @@ Of course, this only lasts until the end of the 5 minute interval, during which 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
-Use this information when editing `/homeassistant/configuration.yaml` to insert these lines below for your own values
-```
-localvolts:
-  api_key: "abc123abc123abc123abc123abc123ab"
-  partner_id: "12345"
-  nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
-```
-
 # Using HACS to install the Localvolts Integration
 
 If you already have HACS installed for Home Assistant you can add this integration as a custom repository
@@ -36,6 +28,13 @@ In HACS,
 
 Now you can browse for and install Localvolts in Home Assistant using HACS
 
+# A setup dialog will appear to allow you to configure the three settings below (no longer necessary to edit configuration.yaml).
+
+```
+  api_key: "abc123abc123abc123abc123abc123ab"
+  partner_id: "12345"
+  nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
+```
 
 # Alternatively, use the manual method to get the integration installed in Home Assistant
 
@@ -43,7 +42,7 @@ In Home Assistant, copy the files in this repository into a subfolder of your ex
 
 # Restart Home Assistant
 In either case, you will need to restart Home Assistant to get the integration working.
-Look for two sensors named "sensor.costsFlexUp" and "sensor.earningsFlexUp" in Home Assistant to verify it worked.
+Look the sensors, "sensor.costsFlexUp" and "sensor.earningsFlexUp", in Home Assistant to verify it worked.
 
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
