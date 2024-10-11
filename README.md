@@ -42,7 +42,7 @@ In Home Assistant, copy the files in this repository into a subfolder of your ex
 
 # Restart Home Assistant
 In either case, you will need to restart Home Assistant to get the integration working.
-Look the sensors, "sensor.costsFlexUp" and "sensor.earningsFlexUp", in Home Assistant to verify it worked.
+Look for the sensors (sensor.costsFlexUp and sensor.earningsFlexUp) in Home Assistant to verify it worked.
 
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
