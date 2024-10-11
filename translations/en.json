@@ -1,0 +1,25 @@
+{
+    "config": {
+        "title": "Add NMI",
+        "step": {
+            "user": {
+                "title": "Add NMI",
+                "description": "Set up the NMI for your Localvolts integration."
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Localvolts Options",
+                "description": "Options for the Localvolts integration."
+            }
+        }
+    },
+    "title": "Localvolts",
+    "device_automation": {
+        "action_type": {
+            "toggle": "Toggle NMI"
+        }
+    }
+}
