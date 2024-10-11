@@ -1,3 +1,4 @@
+
 """Platform for Localvolts sensor integration."""
 
 from __future__ import annotations
@@ -8,11 +9,15 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
 )
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN
+from .const import DOMAIN
+
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
 MONETARY_CONVERSION_FACTOR = 100
@@ -22,14 +27,12 @@ EARNINGS_FLEX_UP = "earningsFlexUp"
 
 _LOGGER = logging.getLogger(__name__)
 
-
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: dict,
+    config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info=None,
 ) -> None:
-    """Set up Localvolts sensors."""
+    """Set up Localvolts sensors from a config entry."""
 
     coordinator = hass.data[DOMAIN]['coordinator']
 
@@ -37,10 +40,9 @@ async def async_setup_platform(
         [
             LocalvoltsCostsFlexUpSensor(coordinator),
             LocalvoltsEarningsFlexUpSensor(coordinator),
-            LocalvoltsDataLagSensor(coordinator),  # Updated sensor name
+            LocalvoltsDataLagSensor(coordinator),
         ]
     )
-
 
 class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Localvolts Sensor."""
