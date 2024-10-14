@@ -3,11 +3,12 @@
   "domain": "localvolts",
   "name": "LocalVolts Integration",
   "documentation": "https://github.com/gurrier/localvolts",
-   "issue_tracker": "https://github.com/gurrier/localvolts/issues",
+  "issue_tracker": "https://github.com/gurrier/localvolts/issues",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "dependencies": [],
   "codeowners": ["@gurrier"],
   "requirements": ["requests>=2.25.1"],
+  "config_flow": true,
   "version": "0.4.1"
 }
