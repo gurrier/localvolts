@@ -7,6 +7,8 @@ The integration exposes three sensors...
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
+This costsFlexUp sensor also has an attribute for 'demandInterval' indicating if the current interval is within the Window for a Demand Tariff
+
 2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
 3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
