@@ -89,6 +89,15 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
         self._attr_name = COSTS_FLEX_UP
         self._attr_unique_id = f"{coordinator.nmi_id}_{COSTS_FLEX_UP}"
 
+    @property
+    def extra_state_attributes(self):
+        # Start with the base attributes defined in LocalvoltsSensor
+        attributes = super().extra_state_attributes
+        # Add the 'demandInterval' attribute if it's available in the coordinator data
+        demand_interval = self.coordinator.data.get("demandInterval")
+        if demand_interval is not None:
+            attributes["demandInterval"] = demand_interval
+        return attributes
 
 class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
     """Sensor for monitoring earningsFlexUp."""
