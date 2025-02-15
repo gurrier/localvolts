@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 import logging
 import voluptuous as vol
 
-from homeassistant.helpers import config_validation as cv, discovery
+from homeassistant.helpers import config_validation as cv
 
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
@@ -56,9 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     hass.data[DOMAIN]['coordinator'] = coordinator
 
     # Load the sensor platform
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(config_entry, "sensor")
-    )
+    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
 
     return True
 
