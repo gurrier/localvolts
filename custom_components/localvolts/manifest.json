@@ -10,5 +10,5 @@
   "codeowners": ["@gurrier"],
   "requirements": ["requests>=2.25.1"],
   "config_flow": true,
-  "version": "0.4.1"
+  "version": "0.5.0"
 }
