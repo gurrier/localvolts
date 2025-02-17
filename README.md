@@ -7,7 +7,17 @@ The integration exposes three sensors...
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
-This costsFlexUp sensor also has an attribute for 'demandInterval' indicating if the current interval is within the Window for a Demand Tariff
+This costsFlexUp sensor also has an attribute for 'DemandInterval' refelcting whether the current 5-minute interval is within the time window for a Demand Tariff to be active.
+NOTE: to use this in a sneor, you should add some code to your configuration.yaml.
+```
+template:
+  - binary_sensor:
+      - name: "In Demand Interval"
+        unique_id: "demand_interval"
+        state: >
+          {{ state_attr('sensor.costsflexup', 'demandInterval') | int == 1 }}
+        icon: mdi:clock
+```
 
 2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
