@@ -23,7 +23,7 @@ template:
       - name: "In Demand Interval"
         unique_id: "demand_interval"
         state: >
-          {{ state_attr('sensor.costsflexup', 'demandInterval') | int == 1 }}
+          {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
         icon: mdi:clock
 ```
 
