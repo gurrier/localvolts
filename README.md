@@ -1,27 +1,31 @@
 # Localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
-The integration exposes three sensors...
+The integration currently exposes four sensors...
 
 1) costsFlexUp is the current IMPORT cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
-This costsFlexUp sensor also has an attribute for 'DemandInterval' reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active.
-NOTE: to use this in a sensor, you should integrate the following code to your configuration.yaml.
+NOTE: If you are using the DemandInterval attribute of this sensor, please switch to the IntervalEnd sensor's attribute of the same name. The DemandInterval attribute will be deprecated from this sensor in a future release to clean up the code.
+
+2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
+
+3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
+
+4) intervalEnd contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
+
+For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
+
 ```
 template:
   - binary_sensor:
       - name: "In Demand Interval"
         unique_id: "demand_interval"
         state: >
-          {{ state_attr('sensor.costsflexup', 'demandInterval') | int == 1 }}
+          {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
         icon: mdi:clock
 ```
-
-2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
-
-3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
