@@ -1,0 +1,45 @@
+{
+    "config": {
+        "title": "Add NMI",
+        "step": {
+            "user": {
+                "title": "Add NMI",
+                "description": "Set up the NMI for your Localvolts integration.",
+                "data": {
+                    "api_key": "API Key",
+                    "partner_id": "Partner ID",
+                    "nmi_id": "NMI ID"
+                }
+            }
+        },
+        "error": {
+            "invalid_api_key": "Invalid API key",
+            "invalid_partner_id": "Invalid partner ID",
+            "invalid_nmi_id": "Invalid NMI ID"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Localvolts Options",
+                "description": "Options for the Localvolts integration.",
+                "data": {
+                    "api_key": "API Key",
+                    "partner_id": "Partner ID",
+                    "nmi_id": "NMI ID"
+                }
+            }
+        },
+        "error": {
+            "invalid_api_key": "Invalid API key",
+            "invalid_partner_id": "Invalid partner ID",
+            "invalid_nmi_id": "Invalid NMI ID"
+        }
+    },
+    "title": "Localvolts",
+    "device_automation": {
+        "action_type": {
+            "toggle": "Toggle NMI"
+        }
+    }
+}
