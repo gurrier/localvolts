@@ -61,6 +61,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     return True
 
 
+async def async_unload_entry(hass: HomeAssistant, config_entry):
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(config_entry, ["sensor"])
+    if unload_ok and DOMAIN in hass.data:
+        hass.data[DOMAIN].pop("coordinator", None)
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
+    return unload_ok
+
+
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the localvolts component."""
     _LOGGER.debug("Setting up the localvolts component.")
