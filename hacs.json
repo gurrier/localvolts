@@ -4,7 +4,7 @@
   "version": "0.5.3",
   "render_readme": true,
   "content_in_root": false,
-  "category": "integration"
+  "category": "integration",
   "icon": "assets/localvolts_icon.png",
   "logo": "assets/localvolts_logo.png"
 }
