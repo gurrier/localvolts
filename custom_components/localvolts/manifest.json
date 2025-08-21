@@ -10,5 +10,6 @@
   "codeowners": ["@gurrier"],
   "requirements": ["python-dateutil>=2.8"],
   "config_flow": true,
-  "version": "0.5.3"
+  "version": "0.5.3",
+  "homeassistant": "2023.12.0"
 }
