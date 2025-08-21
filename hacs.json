@@ -1,10 +1,4 @@
 {
   "name": "Localvolts Integration",
-  "documentation": "https://github.com/gurrier/localvolts",
-  "version": "0.5.4",
-  "render_readme": true,
-  "content_in_root": false,
-  "icon": "assets/localvolts_icon.png",
-  "logo": "assets/localvolts_logo.png",
   "homeassistant": "2023.12.0"
 }
