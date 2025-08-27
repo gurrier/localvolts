@@ -25,6 +25,25 @@ EARNINGS_FLEX_UP = "earningsFlexUp"
 
 _LOGGER = logging.getLogger(__name__)
 
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Localvolts sensors from a config entry."""
+    coordinator = hass.data[DOMAIN]['coordinator']
+
+    async_add_entities(
+        [
+            LocalvoltsCostsFlexUpSensor(coordinator),
+            LocalvoltsEarningsFlexUpSensor(coordinator),
+            LocalvoltsDataLagSensor(coordinator),
+            LocalvoltsIntervalEndSensor(coordinator),
+            LocalvoltsForecastCostsSensor(coordinator),
+        ]
+    )
+
+
 class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
     """Representation of a generic Localvolts sensor."""
 
@@ -196,21 +215,4 @@ class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
             attributes["forecastCount"] = len(self.coordinator.forecast_data)
         return attributes
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up Localvolts sensors from a config entry."""
-    coordinator = hass.data[DOMAIN]['coordinator']
-
-    async_add_entities(
-        [
-            LocalvoltsCostsFlexUpSensor(coordinator),
-            LocalvoltsEarningsFlexUpSensor(coordinator),
-            LocalvoltsDataLagSensor(coordinator),
-            LocalvoltsIntervalEndSensor(coordinator),
-            LocalvoltsForecastCostsSensor(coordinator),
-        ]
-    )
 
