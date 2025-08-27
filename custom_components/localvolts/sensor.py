@@ -182,7 +182,6 @@ class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
     _attr_native_unit_of_measurement = "$/kWh"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_name = "Forecasted Costs Flex Up"
-    _attr_unique_id = f"{coordinator.nmi_id}_forecast_costs_flex_up"
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, "costsFlexUp")
@@ -214,5 +213,4 @@ class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
             attributes["lastUpdate"] = latest_forecast["lastUpdate"]
             attributes["forecastCount"] = len(self.coordinator.forecast_data)
         return attributes
-
 
