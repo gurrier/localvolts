@@ -139,10 +139,10 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     new_data_found = True
                     break
                 elif item.get("quality", "").lower() == "fcst":
-                # Store forecast data
-                self.forecast_data.append(item)
-                _LOGGER.debug(
-                    "Stored forecast data: intervalEnd=%s", item["intervalEnd"])
+                    # Store forecast data
+                    self.forecast_data.append(item)
+                    _LOGGER.debug(
+                        "Stored forecast data: intervalEnd=%s", item["intervalEnd"])
                 else:
                     _LOGGER.debug(
                         "Skipping non-'exp' and non-'fcst' quality data. Only 'exp' and 'fcst' are processed."
