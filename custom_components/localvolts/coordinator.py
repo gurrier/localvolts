@@ -45,7 +45,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
         self.data: Dict[str, Any] = {}
-        self.forecast_data: List[Dict[str, Any]] = [] // Add this to store forecast data
+        self.forecast_data: List[Dict[str, Any]] = []
 
         super().__init__(
             hass,
@@ -139,7 +139,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     new_data_found = True
                     break
                 elif item.get("quality", "").lower() == "fcst":
-                // Store forecast data
+                # Store forecast data
                 self.forecast_data.append(item)
                 _LOGGER.debug(
                     "Stored forecast data: intervalEnd=%s", item["intervalEnd"])
