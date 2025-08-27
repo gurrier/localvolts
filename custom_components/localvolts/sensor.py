@@ -34,7 +34,6 @@ class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
         self._attr_should_poll = False
         self._last_value = None
 
-
 class LocalvoltsPriceSensor(LocalvoltsSensor):
     """LocalVolts Price Sensor"""
 
@@ -58,7 +57,6 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
             "lastUpdate": last_update.isoformat() if last_update else None,
         }
 
-
 class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring costsFlexUp."""
 
@@ -79,7 +77,6 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
             attributes["demandInterval"] = demand_interval
         return attributes
 
-
 class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring earningsFlexUp."""
 
@@ -90,7 +87,6 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
         super().__init__(coordinator, EARNINGS_FLEX_UP)
         self._attr_name = EARNINGS_FLEX_UP
         self._attr_unique_id = f"{coordinator.nmi_id}_{EARNINGS_FLEX_UP}"
-
 
 class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the data lag time in seconds."""
@@ -119,7 +115,6 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
             "intervalEnd": interval_end.isoformat() if interval_end else None,
             "lastUpdate": last_update.isoformat() if last_update else None,
         }
-
 
 class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the end time of the latest interval."""
@@ -161,7 +156,6 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         if getattr(self.coordinator, "intervalEnd", None):
             attrs["intervalEnd"] = self.coordinator.intervalEnd.isoformat()
         return attrs
-
 
 class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
@@ -216,6 +210,7 @@ async def async_setup_entry(
             LocalvoltsEarningsFlexUpSensor(coordinator),
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
-            LocalvoltsForecastCostsSensor(coordinator),  
+            LocalvoltsForecastCostsSensor(coordinator),
         ]
     )
+
