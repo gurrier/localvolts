@@ -176,7 +176,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
             attrs["intervalEnd"] = self.coordinator.intervalEnd.isoformat()
         return attrs
 
-class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
+class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
 
     _attr_native_unit_of_measurement = "$/kWh"
@@ -184,9 +184,10 @@ class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
     _attr_name = "Forecasted Costs Flex Up"
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
-        super().__init__(coordinator, "costsFlexUp")
+        super().__init__(coordinator)
         self._attr_name = "Forecasted Costs Flex Up"
         self._attr_unique_id = f"{coordinator.nmi_id}_forecast_costs_flex_up"
+        self._attr_should_poll = False
 
     @property
     def native_value(self):
@@ -205,12 +206,18 @@ class LocalvoltsForecastCostsSensor(LocalvoltsPriceSensor):
     @property
     def extra_state_attributes(self):
         """Return forecast-specific attributes."""
-        attributes = super().extra_state_attributes
+        attributes = {}
         if self.coordinator.forecast_data:
-            latest_forecast = max(
-                self.coordinator.forecast_data, key=lambda x: x["intervalEnd"])
-            attributes["intervalEnd"] = latest_forecast["intervalEnd"]
-            attributes["lastUpdate"] = latest_forecast["lastUpdate"]
+            # Include all forecast data points as attributes
+            forecast_data = []
+            for forecast in self.coordinator.forecast_data:
+                forecast_entry = {
+                    "intervalEnd": forecast["intervalEnd"],
+                    "costsFlexUp": round(forecast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 3),
+                    "earningsFlexUp": round(forecast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 3),
+                }
+                forecast_data.append(forecast_entry)
+            attributes["forecast_data"] = forecast_data
             attributes["forecastCount"] = len(self.coordinator.forecast_data)
         return attributes
 

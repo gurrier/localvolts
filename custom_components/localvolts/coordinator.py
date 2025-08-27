@@ -150,5 +150,9 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 
-        # Return self.data to comply with DataUpdateCoordinator requirements
-        return self.data
+    # Return both exp data and forecast data
+    # The coordinator will make this available to sensors
+    return {
+        "exp": self.data,
+        "fcst": self.forecast_data
+    }
