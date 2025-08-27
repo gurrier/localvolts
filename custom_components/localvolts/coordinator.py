@@ -111,6 +111,8 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Process data
             new_data_found = False
+            # Clear existing forecast data to prevent duplicates
+            self.forecast_data.clear()
             for item in data:
                 if item.get("quality", "").lower() == "exp":
                     interval_end = parser.isoparse(item["intervalEnd"])
@@ -137,7 +139,6 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         self.lastUpdate,
                     )
                     new_data_found = True
-                    break
                 elif item.get("quality", "").lower() == "fcst":
                     # Store forecast data
                     self.forecast_data.append(item)
