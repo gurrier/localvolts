@@ -147,11 +147,6 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug(
                         "Skipping non-'exp' and non-'fcst' quality data. Only 'exp' and 'fcst' are processed."
                     )
-            if not new_data_found:
-                _LOGGER.debug(
-                    "No new data with 'exp' quality found. Retaining last known data.")
-                # Do not update self.time_past_start; retain the last known value
-                # Optionally, you can log the time since the last update if needed
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 
