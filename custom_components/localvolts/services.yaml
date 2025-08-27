@@ -1,0 +1,14 @@
+dayahead:
+  name: Day-Ahead Optimization
+  description: Trigger the EMHASS day-ahead optimization routine.
+  fields: {}
+
+naive_mpc_optim:
+  name: Naive MPC Optimization
+  description: Trigger the EMHASS naive model predictive control optimization.
+  fields: {}
+
+publish_data:
+  name: Publish Data
+  description: Trigger the EMHASS publish data routine.
+  fields: {}

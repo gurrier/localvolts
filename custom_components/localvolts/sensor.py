@@ -1,9 +1,10 @@
-"""Platform for Localvolts sensor integration."""
+"""Platform for Localvolts sensor integration. August 2025"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -25,7 +26,6 @@ EARNINGS_FLEX_UP = "earningsFlexUp"
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -40,6 +40,7 @@ async def async_setup_entry(
             LocalvoltsEarningsFlexUpSensor(coordinator),
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
+            LocalvoltsForecastCostsSensor(coordinator),
         ]
     )
 
@@ -53,10 +54,14 @@ class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
         self._attr_should_poll = False
         self._last_value = None
 
+class LocalvoltsPriceSensor(LocalvoltsSensor):
+    """LocalVolts Price Sensor"""
+
     @property
     def native_value(self):
         """Return the state of the sensor (scaled monetary value)."""
-        item = self.coordinator.data
+        # Access the 'exp' dict if present, else fallback to previous behavior
+        item = self.coordinator.data.get("exp", self.coordinator.data)
         if item:
             value = item.get(self.data_key)
             if value is not None:
@@ -73,8 +78,7 @@ class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
             "lastUpdate": last_update.isoformat() if last_update else None,
         }
 
-
-class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
+class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring costsFlexUp."""
 
     _attr_native_unit_of_measurement = "$/kWh"
@@ -82,8 +86,9 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, COSTS_FLEX_UP)
-        self._attr_name = COSTS_FLEX_UP
-        self._attr_unique_id = f"{coordinator.nmi_id}_{COSTS_FLEX_UP}"
+        # {{change 1}}
+        self._attr_name = "costsFlexUp"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_costsflexup"
 
     @property
     def extra_state_attributes(self):
@@ -94,8 +99,7 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsSensor):
             attributes["demandInterval"] = demand_interval
         return attributes
 
-
-class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
+class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring earningsFlexUp."""
 
     _attr_native_unit_of_measurement = "$/kWh"
@@ -103,9 +107,9 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsSensor):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, EARNINGS_FLEX_UP)
-        self._attr_name = EARNINGS_FLEX_UP
-        self._attr_unique_id = f"{coordinator.nmi_id}_{EARNINGS_FLEX_UP}"
-
+        # {{change 2}}
+        self._attr_name = "earningsFlexUp"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_earningsflexup"
 
 class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the data lag time in seconds."""
@@ -115,8 +119,9 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
+        # {{change 3}}
         self._attr_name = "DataLag"
-        self._attr_unique_id = f"{coordinator.nmi_id}_data_lag"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_datalag"
         self._attr_should_poll = False
 
     @property
@@ -135,7 +140,6 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
             "lastUpdate": last_update.isoformat() if last_update else None,
         }
 
-
 class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the end time of the latest interval."""
 
@@ -143,8 +147,9 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
+        # {{change 4}}
         self._attr_name = "IntervalEnd"
-        self._attr_unique_id = f"{coordinator.nmi_id}_interval_end"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_intervalend"
         self._attr_should_poll = False
 
     @property
@@ -155,24 +160,80 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """
-        Return all available interval fields as attributes.
-
-        This method copies every key/value pair from the coordinator's data dictionary,
-        converting any datetime objects to ISO strings for readability.  It then adds
-        the `lastUpdate` and `intervalEnd` timestamps (converted to ISO strings) so
-        that these are always present.
+        Return limited attributes to avoid exceeding size limits.
+        
+        Only include essential fields to prevent database performance issues.
         """
         attrs: dict[str, Any] = {}
-        data = getattr(self.coordinator, "data", {}) or {}
-        # Copy all fields from the data record
-        for key, value in data.items():
-            if hasattr(value, "isoformat"):
-                attrs[key] = value.isoformat()
-            else:
-                attrs[key] = value
-        # Ensure lastUpdate and intervalEnd are included as ISO strings
-        if getattr(self.coordinator, "lastUpdate", None):
-            attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
-        if getattr(self.coordinator, "intervalEnd", None):
+        
+        # Only include critical fields that are needed
+        if self.coordinator.intervalEnd:
             attrs["intervalEnd"] = self.coordinator.intervalEnd.isoformat()
+            
+        if self.coordinator.lastUpdate:
+            attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
+            
+        # Only include a few key fields from data, not all of them
+        data = getattr(self.coordinator, "data", {})
+        critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval", "intervalStart"]
+        
+        for field in critical_fields:
+            if field in data:
+                value = data[field]
+                if hasattr(value, "isoformat"):
+                    attrs[field] = value.isoformat()
+                else:
+                    attrs[field] = value
+                    
         return attrs
+
+class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
+
+    _attr_native_unit_of_measurement = "c/kWh"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_name = "Forecasted Costs Flex Up"
+
+    def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_name = "Forecasted Costs Flex Up"
+        self._attr_unique_id = f"{coordinator.nmi_id}_forecast_costs_flex_up"
+        self._attr_should_poll = False
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor (cents per kWh)."""
+        if not self.coordinator.forecast_data:
+            return None
+
+        # Get the most recent forecast data
+        latest_forecast = max(self.coordinator.forecast_data,
+                              key=lambda x: x["intervalEnd"])
+        value = latest_forecast.get("costsFlexUp")
+        if value is not None:
+            return round(value, 3)
+        return None
+
+    @property
+    def extra_state_attributes(self):
+        """Return forecast-specific attributes for EMHASS integration."""
+        attributes = {}
+        forecast = []
+        if self.coordinator.forecast_data:
+            for fcast in self.coordinator.forecast_data:
+                try:
+                    interval_end_dt = datetime.fromisoformat(fcast["intervalEnd"].replace("Z", "+00:00"))
+                    duration = int(fcast.get("intervalDuration", 5))
+                    start_time_dt = interval_end_dt - timedelta(minutes=duration)
+                    forecast.append({
+                        "duration": duration,
+                        "start_time": start_time_dt.isoformat(),
+                        "end_time": interval_end_dt.isoformat(),
+                        "earningsFlexUp": round(fcast.get("earningsFlexUp", 0), 5),
+                        "costsFlexUp": round(fcast.get("costsFlexUp", 0), 5)
+                    })
+                except Exception:
+                    continue
+            attributes["forecast"] = forecast
+            attributes["forecastcount"] = len(forecast)
+        return attributes
