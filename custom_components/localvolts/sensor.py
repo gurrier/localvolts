@@ -154,26 +154,31 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """
-        Return all available interval fields as attributes.
-
-        This method copies every key/value pair from the coordinator's data dictionary,
-        converting any datetime objects to ISO strings for readability.  It then adds
-        the `lastUpdate` and `intervalEnd` timestamps (converted to ISO strings) so
-        that these are always present.
+        Return limited attributes to avoid exceeding size limits.
+        
+        Only include essential fields to prevent database performance issues.
         """
         attrs: dict[str, Any] = {}
-        data = getattr(self.coordinator, "data", {}) or {}
-        # Copy all fields from the data record
-        for key, value in data.items():
-            if hasattr(value, "isoformat"):
-                attrs[key] = value.isoformat()
-            else:
-                attrs[key] = value
-        # Ensure lastUpdate and intervalEnd are included as ISO strings
-        if getattr(self.coordinator, "lastUpdate", None):
-            attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
-        if getattr(self.coordinator, "intervalEnd", None):
+        
+        # Only include critical fields that are needed
+        if self.coordinator.intervalEnd:
             attrs["intervalEnd"] = self.coordinator.intervalEnd.isoformat()
+            
+        if self.coordinator.lastUpdate:
+            attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
+            
+        # Only include a few key fields from data, not all of them
+        data = getattr(self.coordinator, "data", {})
+        critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval", "intervalStart"]
+        
+        for field in critical_fields:
+            if field in data:
+                value = data[field]
+                if hasattr(value, "isoformat"):
+                    attrs[field] = value.isoformat()
+                else:
+                    attrs[field] = value
+                    
         return attrs
 
 class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
