@@ -207,15 +207,15 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-"""Set up Localvolts sensors from a config entry."""
-coordinator = hass.data[DOMAIN]['coordinator']
+    """Set up Localvolts sensors from a config entry."""
+    coordinator = hass.data[DOMAIN]['coordinator']
 
-async_add_entities(
-    [
-        LocalvoltsCostsFlexUpSensor(coordinator),
-        LocalvoltsEarningsFlexUpSensor(coordinator),
-        LocalvoltsDataLagSensor(coordinator),
-        LocalvoltsIntervalEndSensor(coordinator),
-        LocalvoltsForecastCostsSensor(coordinator),  
-    ]
-)
+    async_add_entities(
+        [
+            LocalvoltsCostsFlexUpSensor(coordinator),
+            LocalvoltsEarningsFlexUpSensor(coordinator),
+            LocalvoltsDataLagSensor(coordinator),
+            LocalvoltsIntervalEndSensor(coordinator),
+            LocalvoltsForecastCostsSensor(coordinator),  
+        ]
+    )
