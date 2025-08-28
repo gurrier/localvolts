@@ -1,4 +1,4 @@
-"""Platform for Localvolts sensor integration."""
+"""Platform for Localvolts sensor integration. August 2025"""
 
 from __future__ import annotations
 
