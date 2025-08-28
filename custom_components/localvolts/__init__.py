@@ -39,8 +39,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     partner_id = config_entry.data[CONF_PARTNER_ID]
     nmi_id = config_entry.data[CONF_NMI_ID]
 
+    # Read EMHASS settings (prefer options, fallback to data) ---
+    emhass_enabled = config_entry.options.get("emhass_enabled", config_entry.data.get("emhass_enabled", False))
+    emhass_address = config_entry.options.get("emhass_address", config_entry.data.get("emhass_address", ""))
+    
+    # Store them for global access within your integration
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["api_key"] = api_key
+    hass.data[DOMAIN]["partner_id"] = partner_id
+    hass.data[DOMAIN]["nmi_id"] = nmi_id
+    hass.data[DOMAIN]["emhass_enabled"] = emhass_enabled
+    hass.data[DOMAIN]["emhass_address"] = emhass_address
+
     # Initialize coordinator
-    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id)
+    coordinator = LocalvoltsDataUpdateCoordinator(hass)
 
     try:
         await coordinator.async_refresh()

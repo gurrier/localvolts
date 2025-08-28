@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from .const import DOMAIN
 
 import aiohttp
 
@@ -25,22 +26,13 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     # def __init__(self, hass: HomeAssistant, api_key, partner_id, nmi_id):
     def __init__(
         self,
-        hass: HomeAssistant,
-        api_key: str,
-        partner_id: str,
-        nmi_id: str,
+        hass
     ) -> None:
         """Initialize the coordinator."""
-        # self.api_key = api_key
-        # self.partner_id = partner_id
-        # self.nmi_id = nmi_id
-        # self.intervalEnd = None
-        # self.lastUpdate = None
-        # self.time_past_start = datetime.timedelta(0)
-        # self.data = {}
-        self.api_key: str = api_key
-        self.partner_id: str = partner_id
-        self.nmi_id: str = nmi_id
+        self.hass = hass
+        api_key: str = self.hass.data[DOMAIN]["api_key"]
+        partner_id = self.hass.data[DOMAIN]["partner_id"]
+        nmi_id: str = self.hass.data[DOMAIN]["nmi_id"]
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
@@ -74,12 +66,12 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
             url: str = (
                 f"https://api.localvolts.com/v1/customer/interval?"
-                f"NMI={self.nmi_id}&from={from_time_str}&to={to_time_str}"
+                f"NMI={nmi_id}&from={from_time_str}&to={to_time_str}"
             )
 
             headers: Dict[str, str] = {
-                "Authorization": f"apikey {self.api_key}",
-                "partner": self.partner_id,
+                "Authorization": f"apikey {api_key}",
+                "partner": partner_id,
             }
 
             try:
