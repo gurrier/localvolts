@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -189,7 +190,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
 class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
 
-    _attr_native_unit_of_measurement = "$/kWh"
+    _attr_native_unit_of_measurement = "c/kWh"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_name = "Forecasted Costs Flex Up"
 
@@ -201,7 +202,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        """Return the state of the sensor (scaled monetary value)."""
+        """Return the state of the sensor (cents per kWh)."""
         if not self.coordinator.forecast_data:
             return None
 
@@ -210,34 +211,29 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
                               key=lambda x: x["intervalEnd"])
         value = latest_forecast.get("costsFlexUp")
         if value is not None:
-            return round(value / MONETARY_CONVERSION_FACTOR, 3)
+            return round(value, 3)
         return None
 
     @property
     def extra_state_attributes(self):
-        """Return forecast-specific attributes, including lists for EMHASS integration."""
+        """Return forecast-specific attributes for EMHASS integration."""
         attributes = {}
+        forecast = []
         if self.coordinator.forecast_data:
-            # Lists of values for direct templating in Home Assistant/EMHASS
-            prod_price_forecast = [
-                round(fcast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
-                for fcast in self.coordinator.forecast_data
-            ]
-            load_cost_forecast = [
-                round(fcast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
-                for fcast in self.coordinator.forecast_data
-            ]
-            # Full forecast dicts as expected by some EMHASS templates
-            forecast = [
-                {
-                    "earningsFlexUp": round(fcast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5),
-                    "costsFlexUp": round(fcast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
-                }
-                for fcast in self.coordinator.forecast_data
-            ]
-            attributes["prod_price_forecast"] = prod_price_forecast
-            attributes["load_cost_forecast"] = load_cost_forecast
+            for fcast in self.coordinator.forecast_data:
+                try:
+                    interval_end_dt = datetime.fromisoformat(fcast["intervalEnd"].replace("Z", "+00:00"))
+                    duration = int(fcast.get("intervalDuration", 5))
+                    start_time_dt = interval_end_dt - timedelta(minutes=duration)
+                    forecast.append({
+                        "duration": duration,
+                        "start_time": start_time_dt.isoformat(),
+                        "end_time": interval_end_dt.isoformat(),
+                        "earningsFlexUp": round(fcast.get("earningsFlexUp", 0), 5),
+                        "costsFlexUp": round(fcast.get("costsFlexUp", 0), 5)
+                    })
+                except Exception:
+                    continue
             attributes["forecast"] = forecast
-            attributes["forecastCount"] = len(forecast)
+            attributes["forecastcount"] = len(forecast)
         return attributes
-
