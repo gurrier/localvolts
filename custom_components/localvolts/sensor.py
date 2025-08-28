@@ -59,7 +59,8 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
     @property
     def native_value(self):
         """Return the state of the sensor (scaled monetary value)."""
-        item = self.coordinator.data
+        # Access the 'exp' dict if present, else fallback to previous behavior
+        item = self.coordinator.data.get("exp", self.coordinator.data)
         if item:
             value = item.get(self.data_key)
             if value is not None:
