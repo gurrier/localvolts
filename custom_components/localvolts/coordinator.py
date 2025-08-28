@@ -60,7 +60,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             datetime.timezone.utc)
         from_time: datetime.datetime = current_utc_time
         to_time: datetime.datetime = current_utc_time + \
-            datetime.timedelta(minutes=5)
+            datetime.timedelta(hours=24)
 
         _LOGGER.debug("intervalEnd = %s", self.intervalEnd)
         _LOGGER.debug("lastUpdate = %s", self.lastUpdate)
