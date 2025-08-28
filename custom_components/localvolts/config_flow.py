@@ -6,10 +6,35 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID
+from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID, EMHASS_ENABLED, EMHASS_ADDRESS
 from . import validate_api_key, validate_partner_id, validate_nmi_id
 
 _LOGGER = logging.getLogger(__name__)
+
+STEP_USER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Optional(EMHASS_ENABLED, default=False): bool,
+        # Don't add address here, only show if toggle is true
+        # ... any other fields ...
+    }
+)
+
+STEP_EMHASS_SCHEMA = vol.Schema(
+    {
+        vol.Required(EMHASS_ADDRESS): str,
+    }
+)
+# Add these for options flow too
+OPTIONS_USER_SCHEMA = vol.Schema(
+    {
+        vol.Optional(EMHASS_ENABLED, default=False): bool,
+    }
+)
+OPTIONS_EMHASS_SCHEMA = vol.Schema(
+    {
+        vol.Required(EMHASS_ADDRESS): str,
+    }
+)
 
 # Define the schema with placeholders for default values
 def build_data_schema(existing_data):
@@ -37,7 +62,9 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         #_LOGGER.debug("Existing data: %s", existing_data)
 
         if user_input is not None:
-            # Validate the inputs
+            self._user_input = user_input
+            if user_input.get(EMHASS_ENABLED):
+                return await self.async_step_emhass()
             if not validate_api_key(user_input[CONF_API_KEY]):
                 errors[CONF_API_KEY] = "invalid_api_key"
             elif not validate_partner_id(user_input[CONF_PARTNER_ID]):
@@ -52,10 +79,22 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=title, data=user_input)
                 
         # Show the form if there are errors or if the user input is None
-        return self.async_show_form(
-            step_id="user", data_schema=build_data_schema(existing_data), errors=errors
+                return self.async_show_form(
+        step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
-
+    async def async_step_emhass(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._user_input.update(user_input)
+            # ... Finish the flow here with self._user_input ...
+            return self.async_create_entry( # or next step
+                title="Localvolts Configuration",
+                data=self._user_input,
+            )
+        return self.async_show_form(
+            step_id="emhass", data_schema=STEP_EMHASS_SCHEMA, errors=errors
+        )
+        
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
@@ -65,24 +104,47 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for the Localvolts integration."""
 
     def __init__(self, config_entry):
-        """Initialize Localvolts options flow."""
         super().__init__()
         self.config_entry = config_entry
+        self._options = dict(config_entry.options)
 
-    async def async_step_init(self, user_input=None) -> FlowResult:
-        """Manage the options."""
+    async def async_step_init(self, user_input=None):
         return await self.async_step_user(user_input)
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
-        """Handle the options step."""
+    async def async_step_user(self, user_input=None):
         errors = {}
-
         if user_input is not None:
-            # Save the updated options
-            return self.async_create_entry(title="", data=user_input)
+            self._options.update(user_input)
+            if user_input.get(EMHASS_ENABLED):
+                return await self.async_step_emhass()
+            # Save and exit if not enabled
+            return self.async_create_entry(title="", data=self._options)
 
-        # Pre-populate with existing options
-        options = self.config_entry.options
+        # Show toggle, default to previous setting
         return self.async_show_form(
-            step_id="user", data_schema=build_data_schema(options), errors=errors
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Optional(
+                    EMHASS_ENABLED,
+                    default=self._options.get(EMHASS_ENABLED, False)
+                ): bool,
+            }),
+            errors=errors,
+        )
+
+    async def async_step_emhass(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._options.update(user_input)
+            return self.async_create_entry(title="", data=self._options)
+        # Show address, default to previous
+        return self.async_show_form(
+            step_id="emhass",
+            data_schema=vol.Schema({
+                vol.Required(
+                    EMHASS_ADDRESS,
+                    default=self._options.get(EMHASS_ADDRESS, "")
+                ): str,
+            }),
+            errors=errors
         )
