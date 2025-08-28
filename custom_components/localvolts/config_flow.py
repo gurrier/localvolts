@@ -54,6 +54,9 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for the Localvolts integration."""
 
     VERSION = 1
+    def __init__(self):
+        super().__init__()
+        self._options = {}  # <-- needed for storing across steps
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle the initial step."""
