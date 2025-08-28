@@ -215,19 +215,29 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        """Return forecast-specific attributes."""
+        """Return forecast-specific attributes, including lists for EMHASS integration."""
         attributes = {}
         if self.coordinator.forecast_data:
-            # Include all forecast data points as attributes
-            forecast_data = []
-            for forecast in self.coordinator.forecast_data:
-                forecast_entry = {
-                    "intervalEnd": forecast["intervalEnd"],
-                    "costsFlexUp": round(forecast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 3),
-                    "earningsFlexUp": round(forecast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 3),
+            # Lists of values for direct templating in Home Assistant/EMHASS
+            prod_price_forecast = [
+                round(fcast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
+                for fcast in self.coordinator.forecast_data
+            ]
+            load_cost_forecast = [
+                round(fcast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
+                for fcast in self.coordinator.forecast_data
+            ]
+            # Full forecast dicts as expected by some EMHASS templates
+            forecast = [
+                {
+                    "earningsFlexUp": round(fcast.get("earningsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5),
+                    "costsFlexUp": round(fcast.get("costsFlexUp", 0) / MONETARY_CONVERSION_FACTOR, 5)
                 }
-                forecast_data.append(forecast_entry)
-            attributes["forecast_data"] = forecast_data
-            attributes["forecastCount"] = len(self.coordinator.forecast_data)
+                for fcast in self.coordinator.forecast_data
+            ]
+            attributes["prod_price_forecast"] = prod_price_forecast
+            attributes["load_cost_forecast"] = load_cost_forecast
+            attributes["forecast"] = forecast
+            attributes["forecastCount"] = len(forecast)
         return attributes
 
