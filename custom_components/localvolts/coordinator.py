@@ -30,9 +30,6 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Initialize the coordinator."""
         self.hass = hass
-        api_key: str = self.hass.data[DOMAIN]["api_key"]
-        partner_id = self.hass.data[DOMAIN]["partner_id"]
-        nmi_id: str = self.hass.data[DOMAIN]["nmi_id"]
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
@@ -47,6 +44,9 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> Dict[str, Any]:
+        api_key: str = self.hass.data[DOMAIN]["api_key"]
+        partner_id = self.hass.data[DOMAIN]["partner_id"]
+        nmi_id: str = self.hass.data[DOMAIN]["nmi_id"]
         """Fetch data from the API endpoint."""
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
