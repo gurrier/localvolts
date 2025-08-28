@@ -86,8 +86,8 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, COSTS_FLEX_UP)
         # {{change 1}}
-        self._attr_name = "Localvolts Costs Flex Up"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_costs_flex_up"
+        self._attr_name = "costsFlexUp"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_costsflexup"
 
     @property
     def extra_state_attributes(self):
@@ -107,8 +107,8 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, EARNINGS_FLEX_UP)
         # {{change 2}}
-        self._attr_name = "Localvolts Earnings Flex Up"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_earnings_flex_up"
+        self._attr_name = "earningsFlexUp"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_earningsflexup"
 
 class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the data lag time in seconds."""
@@ -119,8 +119,8 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         # {{change 3}}
-        self._attr_name = "Localvolts Data Lag"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_data_lag"
+        self._attr_name = "DataLag"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_datalag"
         self._attr_should_poll = False
 
     @property
@@ -147,8 +147,8 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         # {{change 4}}
-        self._attr_name = "Localvolts Interval End"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_interval_end"
+        self._attr_name = "IntervalEnd"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_intervalend"
         self._attr_should_poll = False
 
     @property
