@@ -16,6 +16,8 @@ from .const import (
     CONF_API_KEY,
     CONF_PARTNER_ID,
     CONF_NMI_ID,
+    EMHASS_ENABLED,
+    EMHASS_ADDRESS
 )
 
 CONFIG_SCHEMA = vol.Schema(
