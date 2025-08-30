@@ -136,6 +136,7 @@ async def async_setup_entry(hass, config_entry):
 
     # Function to check emhass_enabled and run MPC and publish_data
     async def maybe_run_mpc(now):
+        _LOGGER.warning("periodic_check called at %s", now)
         if hass.data[DOMAIN].get("emhass_enabled", False):
             await hass.services.async_call("localvolts", "naive_mpc_optim")
             await hass.services.async_call("localvolts", "publish_data")
@@ -162,7 +163,7 @@ async def async_setup_entry(hass, config_entry):
     # )
     
     def is_mod_5(n):
-    return n % 5 == 0
+        return n % 5 == 0
 
     async def periodic_check(now):
         # This is running every minute at second 30, but we only want every 5 minutes
