@@ -87,24 +87,24 @@ class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
                 
-    async def async_step_emhass(self, user_input=None):
-        errors = {}
-        if user_input is not None:
-            self._options.update(user_input)  # will just contain emhass fields
-            to_save = self._user_input.copy()
-            to_save.update(self._options)
-            title = f"NMI: {to_save.get(CONF_NMI_ID, '')}"
-            return self.async_create_entry(title=title, data=to_save)
-        return self.async_show_form(
-            step_id="emhass",
-            data_schema=vol.Schema({
-                vol.Required(
-                    EMHASS_ADDRESS,
-                    default=self._options.get(EMHASS_ADDRESS, "")
-                ): str,
-            }),
-            errors=errors
-        )
+    # async def async_step_emhass(self, user_input=None):
+    #     errors = {}
+    #     if user_input is not None:
+    #         self._options.update(user_input)  # will just contain emhass fields
+    #         to_save = self._user_input.copy()
+    #         to_save.update(self._options)
+    #         title = f"NMI: {to_save.get(CONF_NMI_ID, '')}"
+    #         return self.async_create_entry(title=title, data=to_save)
+    #     return self.async_show_form(
+    #         step_id="emhass",
+    #         data_schema=vol.Schema({
+    #             vol.Required(
+    #                 EMHASS_ADDRESS,
+    #                 default=self._options.get(EMHASS_ADDRESS, "")
+    #             ): str,
+    #         }),
+    #         errors=errors
+    #     )
         
     @staticmethod
     @callback
@@ -151,19 +151,19 @@ class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors,
         )
 
-    async def async_step_emhass(self, user_input=None):
-        errors = {}
-        # Show the address input, prefilled if previously set
-        if user_input is not None:
-            self._options.update(user_input)
-            return self.async_create_entry(title="", data=self._options)
-        return self.async_show_form(
-            step_id="emhass",
-            data_schema=vol.Schema({
-                vol.Required(
-                    EMHASS_ADDRESS,
-                    default=self._options.get(EMHASS_ADDRESS, "")
-                ): str,
-            }),
-            errors=errors
-        )
+    # async def async_step_emhass(self, user_input=None):
+    #     errors = {}
+    #     # Show the address input, prefilled if previously set
+    #     if user_input is not None:
+    #         self._options.update(user_input)
+    #         return self.async_create_entry(title="", data=self._options)
+    #     return self.async_show_form(
+    #         step_id="emhass",
+    #         data_schema=vol.Schema({
+    #             vol.Required(
+    #                 EMHASS_ADDRESS,
+    #                 default=self._options.get(EMHASS_ADDRESS, "")
+    #             ): str,
+    #         }),
+    #         errors=errors
+    #     )
