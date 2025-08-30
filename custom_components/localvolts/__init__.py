@@ -97,6 +97,7 @@ async def async_setup_entry(hass, config_entry):
     nmi_id = config_entry.data[CONF_NMI_ID]
     emhass_enabled = config_entry.data[EMHASS_ENABLED]
     emhass_address = config_entry.data[EMHASS_ADDRESS]
+    emhass_battery_soc_entity = config_entry.data.get(EMHASS_BATTERY_SOC_ENTITY, "")
     
     # Store them for global access within your integration
     hass.data.setdefault(DOMAIN, {})
@@ -105,6 +106,7 @@ async def async_setup_entry(hass, config_entry):
     hass.data[DOMAIN]["nmi_id"] = nmi_id
     hass.data[DOMAIN]["emhass_enabled"] = emhass_enabled
     hass.data[DOMAIN]["emhass_address"] = emhass_address
+    hass.data[DOMAIN]["emhass_battery_soc_entity"] = emhass_battery_soc_entity
     
     # Debug schedule
     _LOGGER.warning("emhass_enabled: %s", hass.data[DOMAIN]["emhass_enabled"])
