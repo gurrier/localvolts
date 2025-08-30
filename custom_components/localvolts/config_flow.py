@@ -50,7 +50,7 @@ def validate_emhass_address(address: str) -> bool:
     """Basic validation for EMHASS server address."""
     return address.startswith("http://") or address.startswith("https://")
 
-class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
@@ -111,7 +111,7 @@ class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return LocalvoltsOptionsFlowHandler(config_entry)
 
-class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
+class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         self.config_entry = config_entry
 
