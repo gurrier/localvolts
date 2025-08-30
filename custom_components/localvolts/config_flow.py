@@ -50,51 +50,39 @@ def validate_emhass_address(address: str) -> bool:
     """Basic validation for EMHASS server address."""
     return address.startswith("http://") or address.startswith("https://")
 
-class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for the Localvolts integration."""
-
+class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    def __init__(self):
-        super().__init__()
-        self._user_input = {}
-        self._options = {}  # <-- needed for storing across steps
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
-        """Handle the initial step."""
+    async def async_step_user(self, user_input=None):
         errors = {}
-
-        existing_entry = next(iter(self._async_current_entries()), None)
-        existing_data = existing_entry.data if existing_entry else {}
-
-        # Use build_data_schema to show API/Partner/NMI fields AND the EMHASS toggle
-        schema = build_data_schema(existing_data).extend({
-            vol.Optional(EMHASS_ENABLED, default=existing_data.get(EMHASS_ENABLED, False)): bool,
-        })
-
         if user_input is not None:
-            self._user_input = user_input.copy()  # store full config here
-            if user_input.get(EMHASS_ENABLED):
-                return await self.async_step_emhass()
-            if not validate_api_key(user_input[CONF_API_KEY]):
-                errors[CONF_API_KEY] = "invalid_api_key"
-            elif not validate_partner_id(user_input[CONF_PARTNER_ID]):
-                errors[CONF_PARTNER_ID] = "invalid_partner_id"
-            elif not validate_nmi_id(user_input[CONF_NMI_ID]):
-                errors[CONF_NMI_ID] = "invalid_nmi_id"
+            # Validate required fields
+            api_key = user_input.get("api_key")
+            partner_id = user_input.get("partner_id")
+            nmi = user_input.get("nmi")
+            emhass_enabled = user_input.get("emhass_enabled", False)
+            emhass_address = user_input.get("emhass_address")
+
+            if not api_key:
+                errors["api_key"] = "required"
+            if not partner_id:
+                errors["partner_id"] = "required"
+            if not nmi:
+                errors["nmi"] = "required"
+            if emhass_enabled and not emhass_address:
+                errors["emhass_address"] = "required"
 
             if not errors:
-                title = f"NMI: {user_input[CONF_NMI_ID]}"
-                return self.async_create_entry(title=title, data=user_input)
+                return self.async_create_entry(title="LocalVolts", data=user_input)
 
-        # Include emhass_enabled here for initial config if desired
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_API_KEY): str,
-                vol.Required(CONF_PARTNER_ID): str,
-                vol.Required(CONF_NMI_ID): str,
-                vol.Optional("emhass_enabled", default=True): bool,  # <-- add this
-                vol.Optional("emhass_address", default=""): str,     # If relevant
+                vol.Required("api_key", default=(user_input or {}).get("api_key", "")): str,
+                vol.Required("partner_id", default=(user_input or {}).get("partner_id", "")): str,
+                vol.Required("nmi", default=(user_input or {}).get("nmi", "")): str,
+                vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", False)): bool,
+                vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", "")): str,
             }),
             errors=errors,
         )
@@ -123,54 +111,43 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return LocalvoltsOptionsFlowHandler(config_entry)
 
-class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options for the Localvolts integration."""
-
+class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        super().__init__()
         self.config_entry = config_entry
-        # Start with all current options
-        self._options = dict(config_entry.options)
 
     async def async_step_init(self, user_input=None):
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        options = self.config_entry.options
-        # Expose EMHASS toggle in options page
+            api_key = user_input.get("api_key")
+            partner_id = user_input.get("partner_id")
+            nmi = user_input.get("nmi")
+            emhass_enabled = user_input.get("emhass_enabled", False)
+            emhass_address = user_input.get("emhass_address")
+
+            if not api_key:
+                errors["api_key"] = "required"
+            if not partner_id:
+                errors["partner_id"] = "required"
+            if not nmi:
+                errors["nmi"] = "required"
+            if emhass_enabled and not emhass_address:
+                errors["emhass_address"] = "required"
+
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
+
+        # Use current options or entry data as defaults
+        cur = {**self.config_entry.data, **self.config_entry.options}
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Optional("emhass_enabled", default=options.get("emhass_enabled", True)): bool,
-                vol.Optional("emhass_address", default=options.get("emhass_address", "")): str,
+                vol.Required("api_key", default=(user_input or {}).get("api_key", cur.get("api_key", ""))): str,
+                vol.Required("partner_id", default=(user_input or {}).get("partner_id", cur.get("partner_id", ""))): str,
+                vol.Required("nmi", default=(user_input or {}).get("nmi", cur.get("nmi", ""))): str,
+                vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", cur.get("emhass_enabled", False))): bool,
+                vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", cur.get("emhass_address", ""))): str,
             }),
-        )
-
-    async def async_step_user(self, user_input=None):
-        errors = {}
-
-        # Always show API key, partner id, NMI, EMHASS enabled (toggle)
-        # Don't show address unless toggle is on
-        current = self._options if self._options else self.config_entry.data
-        
-        data_schema = build_data_schema(current)
-        data_schema = data_schema.extend({
-            vol.Optional(
-                EMHASS_ENABLED,
-                default=current.get(EMHASS_ENABLED, False)
-            ): bool,
-        })
-
-        if user_input is not None:
-            self._options.update(user_input)
-            # If EMHASS is enabled, ask for address next
-            if user_input.get(EMHASS_ENABLED):
-                return await self.async_step_emhass()
-            # Otherwise save all fields
-            return self.async_create_entry(title="", data=self._options)
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
             errors=errors,
         )
 
