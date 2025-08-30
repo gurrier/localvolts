@@ -56,6 +56,7 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     def __init__(self):
         super().__init__()
+        self._user_input = {}
         self._options = {}  # <-- needed for storing across steps
 
     async def async_step_user(self, user_input=None) -> FlowResult:
@@ -71,7 +72,7 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         })
 
         if user_input is not None:
-            self._user_input = user_input
+            self._user_input = user_input.copy()  # store full config here
             if user_input.get(EMHASS_ENABLED):
                 return await self.async_step_emhass()
             if not validate_api_key(user_input[CONF_API_KEY]):
@@ -92,12 +93,11 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_emhass(self, user_input=None):
         errors = {}
         if user_input is not None:
-            address = user_input.get(EMHASS_ADDRESS, "")
-            if not validate_emhass_address(address):
-                errors[EMHASS_ADDRESS] = "invalid_emhass_address"
-            else:
-                self._options.update(user_input)
-                return self.async_create_entry(title="", data=self._options)
+            self._options.update(user_input)  # will just contain emhass fields
+            to_save = self._user_input.copy()
+            to_save.update(self._options)
+            title = f"NMI: {to_save.get(CONF_NMI_ID, '')}"
+            return self.async_create_entry(title=title, data=to_save)
         return self.async_show_form(
             step_id="emhass",
             data_schema=vol.Schema({
