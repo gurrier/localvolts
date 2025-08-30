@@ -17,7 +17,8 @@ from .const import (
     CONF_PARTNER_ID,
     CONF_NMI_ID,
     EMHASS_ENABLED,
-    EMHASS_ADDRESS
+    EMHASS_ADDRESS,
+    EMHASS_BATTERY_SOC_ENTITY
 )
 
 CONFIG_SCHEMA = vol.Schema(
@@ -60,8 +61,12 @@ async def async_setup_entry(hass, config_entry):
     async def handle_naive_mpc_optim(call: ServiceCall):
         # Template context
         emhass_address = hass.data[DOMAIN].get("emhass_address")
+        emhass_battery_soc_entity = hass.data[DOMAIN].get("emhass_battery_soc_entity")
         if not emhass_address:
             _LOGGER.error("EMHASS address not set in hass.data[DOMAIN][\"emhass_address\"]")
+            return
+        if not emhass_battery_soc_entity:
+            _LOGGER.error("EMHASS Battery SOC not set in hass.data[DOMAIN][\"emhass_battery_soc_entity\"]")
             return
         url = f"{emhass_address}/action/naive-mpc-optim"
 
@@ -72,7 +77,7 @@ async def async_setup_entry(hass, config_entry):
         prod_price_forecast = [ (v.get('earningsFlexUp', 0.0) or 0.0) / 100 for v in forecast ]
         load_cost_forecast = [ (v.get('costsFlexUp', 0.0) or 0.0) / 100 for v in forecast ]
         prediction_horizon = min(288, len(prod_price_forecast))
-        soc_init = (float(hass.states.get('sensor.sigen_plant_battery_state_of_charge').state or 0)/100) if hass.states.get('sensor.sigen_plant_battery_state_of_charge') else 0
+        soc_init = (float(hass.states.get(emhass_battery_soc_entity).state or 0)/100) if hass.states.get(emhass_battery_soc_entity) else 0
 
         payload = {
             "prediction_horizon": prediction_horizon,

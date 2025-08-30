@@ -10,41 +10,6 @@ from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID, EMHASS_EN
 from . import validate_api_key, validate_partner_id, validate_nmi_id
 
 _LOGGER = logging.getLogger(__name__)
-
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(EMHASS_ENABLED, default=False): bool,
-        # Don't add address here, only show if toggle is true
-        # ... any other fields ...
-    }
-)
-
-STEP_EMHASS_SCHEMA = vol.Schema(
-    {
-        vol.Required(EMHASS_ADDRESS): str,
-    }
-)
-# Add these for options flow too
-OPTIONS_USER_SCHEMA = vol.Schema(
-    {
-        vol.Optional(EMHASS_ENABLED, default=False): bool,
-    }
-)
-OPTIONS_EMHASS_SCHEMA = vol.Schema(
-    {
-        vol.Required(EMHASS_ADDRESS): str,
-    }
-)
-
-# Define the schema with placeholders for default values
-def build_data_schema(existing_data):
-    return vol.Schema(
-        {
-            vol.Required(CONF_API_KEY, default=existing_data.get(CONF_API_KEY, "")): cv.string,
-            vol.Required(CONF_PARTNER_ID, default=existing_data.get(CONF_PARTNER_ID, "")): cv.string,
-            vol.Required(CONF_NMI_ID, default=existing_data.get(CONF_NMI_ID, "")): cv.string,
-        }
-    )
     
 def validate_emhass_address(address: str) -> bool:
     """Basic validation for EMHASS server address."""
@@ -62,6 +27,7 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             nmi_id = user_input.get("nmi_id")
             emhass_enabled = user_input.get("emhass_enabled", False)
             emhass_address = user_input.get("emhass_address")
+            emhass_battery_soc_entity = user_input.get("emhass_battery_soc_entity")
 
             if not api_key:
                 errors["api_key"] = "required"
@@ -71,6 +37,8 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["nmi_id"] = "required"
             if emhass_enabled and not emhass_address:
                 errors["emhass_address"] = "required"
+            if emhass_enabled and not emhass_battery_soc_entity:
+                errors["emhass_battery_soc_entity"] = "required"
 
             if not errors:
                 return self.async_create_entry(title="LocalVolts", data=user_input)
@@ -83,6 +51,7 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", "")): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", False)): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", "")): str,
+                vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", "")): str,
             }),
             errors=errors,
         )
@@ -104,6 +73,7 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
             nmi_id = user_input.get("nmi_id")
             emhass_enabled = user_input.get("emhass_enabled", False)
             emhass_address = user_input.get("emhass_address")
+            emhass_battery_soc_entity = user_input.get("emhass_battery_soc_entity")
 
             if not api_key:
                 errors["api_key"] = "required"
@@ -113,6 +83,8 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 errors["nmi_id"] = "required"
             if emhass_enabled and not emhass_address:
                 errors["emhass_address"] = "required"
+            if emhass_enabled and not emhass_battery_soc_entity:
+                errors["emhass_battery_soc_entity"] = "required"
 
             if not errors:
                 return self.async_create_entry(title="", data=user_input)
@@ -128,6 +100,7 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", cur.get("nmi_id", ""))): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", cur.get("emhass_enabled", False))): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", cur.get("emhass_address", ""))): str,
+                vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", "")): str,
             }),
             errors=errors,
         )
