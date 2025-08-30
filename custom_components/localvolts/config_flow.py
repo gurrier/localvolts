@@ -5,6 +5,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.selector import selector
 
 from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID, EMHASS_ENABLED, EMHASS_ADDRESS, EMHASS_BATTERY_SOC_ENTITY
 from . import validate_api_key, validate_partner_id, validate_nmi_id
@@ -51,7 +52,14 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", "")): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", False)): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", "")): str,
-                vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", "")): str,
+        #         vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", cur.get("emhass_battery_soc_entity", ""))
+        # ): str,
+                vol.Optional(
+                    "emhass_battery_soc_entity",
+                    default=(user_input or {}).get("emhass_battery_soc_entity", ""),
+                ): selector({
+                    "entity": {"domain": "sensor"}
+                }),
             }),
             errors=errors,
         )
@@ -100,7 +108,16 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", cur.get("nmi_id", ""))): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", cur.get("emhass_enabled", False))): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", cur.get("emhass_address", ""))): str,
-                vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", "")): str,
+                # <<--- this will provide a UI dropdown for entities!
+                vol.Optional(
+                    "emhass_battery_soc_entity",
+                    default=(user_input or {}).get("emhass_battery_soc_entity", cur.get("emhass_battery_soc_entity", "")),
+                ): selector({
+                    "entity": {
+                        "domain": "sensor",  # filter for only sensor.* entities
+                        # optionally, you can use "device_class": ... to further restrict
+                    }
+                }),
             }),
             errors=errors,
         )
