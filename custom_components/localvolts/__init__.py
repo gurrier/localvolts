@@ -140,25 +140,40 @@ async def async_setup_entry(hass, config_entry):
             await hass.services.async_call("localvolts", "naive_mpc_optim")
             await hass.services.async_call("localvolts", "publish_data")
 
-    # Register a time trigger for 05:30:00 every day
+    # # Register a time trigger for 05:30:00 every day
+    # async_track_time_change(
+    #     hass,
+    #     maybe_run_dayahead,
+    #     hour=5,
+    #     minute=30,
+    #     second=0,
+    # )
+
+    # # Register an interval trigger for every 5 minutes at :30s
+    # async def periodic_check(now):
+    #     # Only at xx:xx:30
+    #     if now.second == 30:
+    #         await maybe_run_mpc(now)
+            
+    # async_track_time_interval(
+    #     hass,
+    #     periodic_check,
+    #     timedelta(minutes=5),
+    # )
+    
+    def is_mod_5(n):
+    return n % 5 == 0
+
+    async def periodic_check(now):
+        # This is running every minute at second 30, but we only want every 5 minutes
+        if is_mod_5(now.minute):
+            await maybe_run_mpc(now)
+
+    # Register a time trigger for every 5 minutes at :30s
     async_track_time_change(
         hass,
-        maybe_run_dayahead,
-        hour=5,
-        minute=30,
-        second=0,
-    )
-
-    # Register an interval trigger for every 5 minutes at :30s
-    async def periodic_check(now):
-        # Only at xx:xx:30
-        if now.second == 30:
-            await maybe_run_mpc(now)
-            
-    async_track_time_interval(
-        hass,
         periodic_check,
-        timedelta(minutes=5),
+        second=30
     )
 
     return True
