@@ -86,8 +86,17 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 title = f"NMI: {user_input[CONF_NMI_ID]}"
                 return self.async_create_entry(title=title, data=user_input)
 
+        # Include emhass_enabled here for initial config if desired
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(CONF_API_KEY): str,
+                vol.Required(CONF_PARTNER_ID): str,
+                vol.Required(CONF_NMI_ID): str,
+                vol.Optional("emhass_enabled", default=True): bool,  # <-- add this
+                vol.Optional("emhass_address", default=""): str,     # If relevant
+            }),
+            errors=errors,
         )
                 
     async def async_step_emhass(self, user_input=None):
@@ -124,7 +133,17 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
         self._options = dict(config_entry.options)
 
     async def async_step_init(self, user_input=None):
-        return await self.async_step_user(user_input)
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+        options = self.config_entry.options
+        # Expose EMHASS toggle in options page
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional("emhass_enabled", default=options.get("emhass_enabled", True)): bool,
+                vol.Optional("emhass_address", default=options.get("emhass_address", "")): str,
+            }),
+        )
 
     async def async_step_user(self, user_input=None):
         errors = {}
