@@ -92,9 +92,6 @@ async def async_setup_entry(hass, config_entry):
     nmi_id = config_entry.data[CONF_NMI_ID]
     emhass_enabled = config_entry.data[EMHASS_ENABLED]
     emhass_address = config_entry.data[EMHASS_ADDRESS]
-    # Read EMHASS settings (prefer options, fallback to data) ---
-    # emhass_enabled = config_entry.options.get("emhass_enabled", config_entry.data.get("emhass_enabled", False))
-    # emhass_address = config_entry.options.get("emhass_address", config_entry.data.get("emhass_address", ""))
     
     # Store them for global access within your integration
     hass.data.setdefault(DOMAIN, {})
