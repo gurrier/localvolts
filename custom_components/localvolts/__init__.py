@@ -90,10 +90,11 @@ async def async_setup_entry(hass, config_entry):
     api_key = config_entry.data[CONF_API_KEY]
     partner_id = config_entry.data[CONF_PARTNER_ID]
     nmi_id = config_entry.data[CONF_NMI_ID]
-
+    emhass_enabled = config_entry.data[EMHASS_ENABLED]
+    emhass_address = config_entry.data[EMHASS_ADDRESS]
     # Read EMHASS settings (prefer options, fallback to data) ---
-    emhass_enabled = config_entry.options.get("emhass_enabled", config_entry.data.get("emhass_enabled", False))
-    emhass_address = config_entry.options.get("emhass_address", config_entry.data.get("emhass_address", ""))
+    # emhass_enabled = config_entry.options.get("emhass_enabled", config_entry.data.get("emhass_enabled", False))
+    # emhass_address = config_entry.options.get("emhass_address", config_entry.data.get("emhass_address", ""))
     
     # Store them for global access within your integration
     hass.data.setdefault(DOMAIN, {})
@@ -102,6 +103,9 @@ async def async_setup_entry(hass, config_entry):
     hass.data[DOMAIN]["nmi_id"] = nmi_id
     hass.data[DOMAIN]["emhass_enabled"] = emhass_enabled
     hass.data[DOMAIN]["emhass_address"] = emhass_address
+    
+    # Debug schedule
+    _LOGGER.warning("emhass_enabled: %s", hass.data[DOMAIN]["emhass_enabled"])
 
     # Initialize coordinator
     coordinator = LocalvoltsDataUpdateCoordinator(hass)
@@ -150,6 +154,7 @@ async def async_setup_entry(hass, config_entry):
         # Only at xx:xx:30
         if now.second == 30:
             await maybe_run_mpc(now)
+            
     async_track_time_interval(
         hass,
         periodic_check,
