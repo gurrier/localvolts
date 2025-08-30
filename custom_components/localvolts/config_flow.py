@@ -59,7 +59,7 @@ class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Validate required fields
             api_key = user_input.get("api_key")
             partner_id = user_input.get("partner_id")
-            nmi = user_input.get("nmi")
+            nmi_id = user_input.get("nmi_id")
             emhass_enabled = user_input.get("emhass_enabled", False)
             emhass_address = user_input.get("emhass_address")
 
@@ -67,8 +67,8 @@ class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["api_key"] = "required"
             if not partner_id:
                 errors["partner_id"] = "required"
-            if not nmi:
-                errors["nmi"] = "required"
+            if not nmi_id:
+                errors["nmi_id"] = "required"
             if emhass_enabled and not emhass_address:
                 errors["emhass_address"] = "required"
 
@@ -80,7 +80,7 @@ class LocalVoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("api_key", default=(user_input or {}).get("api_key", "")): str,
                 vol.Required("partner_id", default=(user_input or {}).get("partner_id", "")): str,
-                vol.Required("nmi", default=(user_input or {}).get("nmi", "")): str,
+                vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", "")): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", False)): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", "")): str,
             }),
@@ -120,7 +120,7 @@ class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             api_key = user_input.get("api_key")
             partner_id = user_input.get("partner_id")
-            nmi = user_input.get("nmi")
+            nmi_id = user_input.get("nmi_id")
             emhass_enabled = user_input.get("emhass_enabled", False)
             emhass_address = user_input.get("emhass_address")
 
@@ -128,8 +128,8 @@ class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 errors["api_key"] = "required"
             if not partner_id:
                 errors["partner_id"] = "required"
-            if not nmi:
-                errors["nmi"] = "required"
+            if not nmi_id:
+                errors["nmi_id"] = "required"
             if emhass_enabled and not emhass_address:
                 errors["emhass_address"] = "required"
 
@@ -144,7 +144,7 @@ class LocalVoltsOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=vol.Schema({
                 vol.Required("api_key", default=(user_input or {}).get("api_key", cur.get("api_key", ""))): str,
                 vol.Required("partner_id", default=(user_input or {}).get("partner_id", cur.get("partner_id", ""))): str,
-                vol.Required("nmi", default=(user_input or {}).get("nmi", cur.get("nmi", ""))): str,
+                vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", cur.get("nmi_id", ""))): str,
                 vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", cur.get("emhass_enabled", False))): bool,
                 vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", cur.get("emhass_address", ""))): str,
             }),
