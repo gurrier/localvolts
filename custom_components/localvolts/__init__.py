@@ -125,14 +125,14 @@ async def async_setup_entry(hass, config_entry):
     hass.services.async_register("localvolts", "publish_data", handle_publish_data)
     hass.services.async_register("localvolts", "naive_mpc_optim", handle_naive_mpc_optim)
     
-    # Function to check the toggle and run day-ahead optimization
+   # Function to check emhass_enabled and run day-ahead optimization
     async def maybe_run_dayahead(now):
-        if hass.states.is_state("input_boolean.emhass", "on"):
+        if hass.data[DOMAIN].get("emhass_enabled", False):
             await hass.services.async_call("localvolts", "dayahead")
 
-    # Function to check the toggle and run MPC and publish_data
+    # Function to check emhass_enabled and run MPC and publish_data
     async def maybe_run_mpc(now):
-        if hass.states.is_state("input_boolean.emhass", "on"):
+        if hass.data[DOMAIN].get("emhass_enabled", False):
             await hass.services.async_call("localvolts", "naive_mpc_optim")
             await hass.services.async_call("localvolts", "publish_data")
 
