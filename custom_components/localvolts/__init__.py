@@ -86,7 +86,7 @@ async def async_setup_entry(hass, config_entry):
             "alpha": 0,
             "beta": 1,
             "continual_publish": False,
-            "optimization_time_step": 30,
+            "optimization_time_step": 5,
             "soc_init": soc_init
         }
         async with aiohttp.ClientSession() as session:
