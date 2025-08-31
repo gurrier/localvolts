@@ -216,7 +216,6 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        """Return forecast-specific attributes for EMHASS integration."""
         attributes = {}
         forecast = []
         if self.coordinator.forecast_data:

@@ -7,15 +7,11 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import selector
 
-from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID, EMHASS_ENABLED, EMHASS_ADDRESS, EMHASS_BATTERY_SOC_ENTITY
+from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID
 from . import validate_api_key, validate_partner_id, validate_nmi_id
 
 _LOGGER = logging.getLogger(__name__)
     
-def validate_emhass_address(address: str) -> bool:
-    """Basic validation for EMHASS server address."""
-    return address.startswith("http://") or address.startswith("https://")
-
 class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -26,9 +22,6 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             api_key = user_input.get("api_key")
             partner_id = user_input.get("partner_id")
             nmi_id = user_input.get("nmi_id")
-            emhass_enabled = user_input.get("emhass_enabled", False)
-            emhass_address = user_input.get("emhass_address")
-            emhass_battery_soc_entity = user_input.get("emhass_battery_soc_entity")
 
             if not api_key:
                 errors["api_key"] = "required"
@@ -36,10 +29,6 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["partner_id"] = "required"
             if not nmi_id:
                 errors["nmi_id"] = "required"
-            if emhass_enabled and not emhass_address:
-                errors["emhass_address"] = "required"
-            if emhass_enabled and not emhass_battery_soc_entity:
-                errors["emhass_battery_soc_entity"] = "required"
 
             if not errors:
                 return self.async_create_entry(title="LocalVolts", data=user_input)
@@ -50,16 +39,6 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("api_key", default=(user_input or {}).get("api_key", "")): str,
                 vol.Required("partner_id", default=(user_input or {}).get("partner_id", "")): str,
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", "")): str,
-                vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", False)): bool,
-                vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", "")): str,
-        #         vol.Optional("emhass_battery_soc_entity", default=(user_input or {}).get("emhass_battery_soc_entity", cur.get("emhass_battery_soc_entity", ""))
-        # ): str,
-                vol.Optional(
-                    "emhass_battery_soc_entity",
-                    default=(user_input or {}).get("emhass_battery_soc_entity", ""),
-                ): selector({
-                    "entity": {"domain": "sensor"}
-                }),
             }),
             errors=errors,
         )
@@ -79,9 +58,6 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
             api_key = user_input.get("api_key")
             partner_id = user_input.get("partner_id")
             nmi_id = user_input.get("nmi_id")
-            emhass_enabled = user_input.get("emhass_enabled", False)
-            emhass_address = user_input.get("emhass_address")
-            emhass_battery_soc_entity = user_input.get("emhass_battery_soc_entity")
 
             if not api_key:
                 errors["api_key"] = "required"
@@ -89,10 +65,6 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 errors["partner_id"] = "required"
             if not nmi_id:
                 errors["nmi_id"] = "required"
-            if emhass_enabled and not emhass_address:
-                errors["emhass_address"] = "required"
-            if emhass_enabled and not emhass_battery_soc_entity:
-                errors["emhass_battery_soc_entity"] = "required"
 
             if not errors:
                 return self.async_create_entry(title="", data=user_input)
@@ -106,18 +78,6 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("api_key", default=(user_input or {}).get("api_key", cur.get("api_key", ""))): str,
                 vol.Required("partner_id", default=(user_input or {}).get("partner_id", cur.get("partner_id", ""))): str,
                 vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", cur.get("nmi_id", ""))): str,
-                vol.Optional("emhass_enabled", default=(user_input or {}).get("emhass_enabled", cur.get("emhass_enabled", False))): bool,
-                vol.Optional("emhass_address", default=(user_input or {}).get("emhass_address", cur.get("emhass_address", ""))): str,
-                # <<--- this will provide a UI dropdown for entities!
-                vol.Optional(
-                    "emhass_battery_soc_entity",
-                    default=(user_input or {}).get("emhass_battery_soc_entity", cur.get("emhass_battery_soc_entity", "")),
-                ): selector({
-                    "entity": {
-                        "domain": "sensor",  # filter for only sensor.* entities
-                        # optionally, you can use "device_class": ... to further restrict
-                    }
-                }),
             }),
             errors=errors,
         )
