@@ -1,11 +1,13 @@
 """The localvolts integration."""
 
-from homeassistant.core import HomeAssistant
-
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.template import Template, render_complex
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
+from datetime import time, timedelta
 import logging
 import voluptuous as vol
-
-from homeassistant.helpers import config_validation as cv
+import aiohttp
 
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
@@ -13,7 +15,7 @@ from .const import (
     DOMAIN,
     CONF_API_KEY,
     CONF_PARTNER_ID,
-    CONF_NMI_ID,
+    CONF_NMI_ID
 )
 
 CONFIG_SCHEMA = vol.Schema(
@@ -31,16 +33,22 @@ CONFIG_SCHEMA = vol.Schema(
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, config_entry):
+async def async_setup_entry(hass, config_entry):
     """Set up the Localvolts integration from a config entry."""
     _LOGGER.debug("Setting up the Localvolts component from config entry.")
-
+    
     api_key = config_entry.data[CONF_API_KEY]
     partner_id = config_entry.data[CONF_PARTNER_ID]
     nmi_id = config_entry.data[CONF_NMI_ID]
+    
+    # Store them for global access within your integration
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["api_key"] = api_key
+    hass.data[DOMAIN]["partner_id"] = partner_id
+    hass.data[DOMAIN]["nmi_id"] = nmi_id
 
     # Initialize coordinator
-    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id)
+    coordinator = LocalvoltsDataUpdateCoordinator(hass)
 
     try:
         await coordinator.async_refresh()
@@ -57,9 +65,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
 
     # Load the sensor platform
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
-
+    
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, config_entry):
     """Unload a config entry."""
