@@ -15,7 +15,7 @@ NOTE: If you are using the DemandInterval attribute of this sensor, please switc
 
 4) intervalEnd contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
 
-5) forecasted_costs_flex_up state reflects current costsFlexUp in c/kWh. State attributes capture 5 minute forcasts for earningFlexUp and costsFlexUp in c/kWh. Also captures forcastcount (total forecasts in list)
+5) forecasted_costs_flex_up state reflects current costsFlexUp in c/kWh. State attributes capture 5 minute forecasts for earningFlexUp and costsFlexUp in c/kWh. Also captures forecastcount (total forecasts in list)
 
 ```
 forecast:
