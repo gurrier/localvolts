@@ -120,7 +120,7 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         # {{change 3}}
         self._attr_name = "DataLag"
-        self._attr_unique_id = f"{coordinator.nmi_id}_datalag"
+        self._attr_unique_id = f"{coordinator.nmi_id}_data_lag"
         self._attr_should_poll = False
         
     @property
@@ -148,7 +148,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         # {{change 4}}
         self._attr_name = "IntervalEnd"
-        self._attr_unique_id = f"{coordinator.nmi_id}_intervalend"
+        self._attr_unique_id = f"{coordinator.nmi_id}_interval_end"
         self._attr_should_poll = False
         
     @property
@@ -236,4 +236,5 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
             attributes["forecastcount"] = len(forecast)
 
         return attributes
+
 
