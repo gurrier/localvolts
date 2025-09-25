@@ -86,9 +86,13 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, COSTS_FLEX_UP)
-        # {{change 1}}
-        self._attr_name = "costsFlexUp"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_costsflexup"
+        self._attr_name = COSTS_FLEX_UP
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_{COSTS_FLEX_UP}"
+
+        # 🕓 Old format for migration to preserve history
+        self._attr_old_unique_ids = {
+        f"{coordinator.nmi_id}_{COSTS_FLEX_UP}",  # 2024–2025 version, no prefix
+        }
 
     @property
     def extra_state_attributes(self):
@@ -108,8 +112,13 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, EARNINGS_FLEX_UP)
         # {{change 2}}
-        self._attr_name = "earningsFlexUp"
-        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_earningsflexup"
+        self._attr_name = EARNINGS_FLEX_UP
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_{EARNINGS_FLEX_UP}"
+
+        # 🕓 Old format for migration to preserve history
+        self._attr_old_unique_ids = {
+        f"{coordinator.nmi_id}_{EARNINGS_FLEX_UP}",  # 2024–2025 version, no prefix
+        }
 
 class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the data lag time in seconds."""
@@ -123,7 +132,12 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = "DataLag"
         self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_datalag"
         self._attr_should_poll = False
-
+        
+        # 🕓 Old format for migration to preserve history
+        self._attr_old_unique_ids = {
+        f"{coordinator.nmi_id}_datalag",  # 2024–2025 version, no prefix
+        }
+        
     @property
     def native_value(self):
         """Return the duration since the interval started, in seconds."""
@@ -152,6 +166,11 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_intervalend"
         self._attr_should_poll = False
 
+        # 🕓 Old format for migration to preserve history
+        self._attr_old_unique_ids = {
+        f"{coordinator.nmi_id}intervalend",  # 2024–2025 version, no prefix
+        }
+        
     @property
     def native_value(self):
         """Return the interval end as a datetime object."""
@@ -197,7 +216,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_name = "Forecasted Costs Flex Up"
-        self._attr_unique_id = f"{coordinator.nmi_id}_forecast_costs_flex_up"
+        self._attr_unique_id = f"localvolts_{coordinator.nmi_id}_forecast_costs_flex_up"
         self._attr_should_poll = False
 
     @property
@@ -235,4 +254,5 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
                     continue
             attributes["forecast"] = forecast
             attributes["forecastcount"] = len(forecast)
+
         return attributes
