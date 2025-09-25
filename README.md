@@ -1,7 +1,7 @@
 # Localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
-The integration currently exposes four sensors...
+The integration currently exposes five sensors...
 
 1) costsFlexUp is the current IMPORT cost of electricity FOR YOU per kWh until the end of the current 5 minute interval.
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
@@ -14,6 +14,34 @@ NOTE: If you are using the DemandInterval attribute of this sensor, please switc
 3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
 
 4) intervalEnd contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
+
+5) forecasted_costs_flex_up state reflects current costsFlexUp in c/kWh. State attributes capture 5 minute forcasts for earningFlexUp and costsFlexUp in c/kWh. Also captures forcastcount (total forecasts in list)
+
+```
+forecast:
+  - duration: 5
+    start_time: "2025-09-01T21:55:00+00:00"
+    end_time: "2025-09-01T22:00:00+00:00"
+    earningsFlexUp: 22.65218
+    costsFlexUp: 32.34263
+  - duration: 5
+    start_time: "2025-09-01T22:00:00+00:00"
+    end_time: "2025-09-01T22:05:00+00:00"
+    earningsFlexUp: 20.38499
+    costsFlexUp: 29.84872
+  ...
+  - duration: 5
+    start_time: '2025-09-02T21:50:00+00:00'
+    end_time: '2025-09-02T21:55:00+00:00'
+    earningsFlexUp: 12.81728
+    costsFlexUp: 21.52423
+
+  forecastcount: 287
+  unit_of_measurement: c/kWh
+  device_class: monetary
+  friendly_name: Forecasted Costs Flex Up
+```
+
 
 For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
 
