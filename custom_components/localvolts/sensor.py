@@ -26,6 +26,17 @@ EARNINGS_FLEX_UP = "earningsFlexUp"
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _interval_attrs(coordinator: LocalvoltsDataUpdateCoordinator) -> dict[str, Any]:
+    """Return the common intervalEnd/lastUpdate attribute pair."""
+    interval_end = coordinator.intervalEnd
+    last_update = coordinator.lastUpdate
+    return {
+        "intervalEnd": interval_end.isoformat() if interval_end else None,
+        "lastUpdate": last_update.isoformat() if last_update else None,
+    }
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -71,12 +82,7 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
     @property
     def extra_state_attributes(self):
         """Return basic interval attributes (intervalEnd and lastUpdate)."""
-        interval_end = self.coordinator.intervalEnd
-        last_update = self.coordinator.lastUpdate
-        return {
-            "intervalEnd": interval_end.isoformat() if interval_end else None,
-            "lastUpdate": last_update.isoformat() if last_update else None,
-        }
+        return _interval_attrs(self.coordinator)
 
 class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring costsFlexUp."""
@@ -107,7 +113,6 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, EARNINGS_FLEX_UP)
-        # {{change 2}}
         self._attr_name = EARNINGS_FLEX_UP
         self._attr_unique_id = f"{coordinator.nmi_id}_{EARNINGS_FLEX_UP}"
 
@@ -119,11 +124,10 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        # {{change 3}}
         self._attr_name = "DataLag"
         self._attr_unique_id = f"{coordinator.nmi_id}_data_lag"
         self._attr_should_poll = False
-        
+
     @property
     def native_value(self):
         """Return the duration since the interval started, in seconds."""
@@ -133,12 +137,7 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """Return basic interval attributes for data lag."""
-        interval_end = self.coordinator.intervalEnd
-        last_update = self.coordinator.lastUpdate
-        return {
-            "intervalEnd": interval_end.isoformat() if interval_end else None,
-            "lastUpdate": last_update.isoformat() if last_update else None,
-        }
+        return _interval_attrs(self.coordinator)
 
 class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring the end time of the latest interval."""
@@ -147,7 +146,6 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        # {{change 4}}
         self._attr_name = "IntervalEnd"
         self._attr_unique_id = f"{coordinator.nmi_id}_interval_end"
         self._attr_should_poll = False
@@ -176,7 +174,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         # Only include a few key fields from data, not all of them
         data = getattr(self.coordinator, "data", {}) or {}
         data = data.get("exp", data) or {}
-        critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval", "intervalStart"]
+        critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval"]
         
         for field in critical_fields:
             if field in data:
@@ -238,7 +236,8 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
                     if "costsFlexUp" in entry:
                         entry["costsFlexUp"] = round(entry["costsFlexUp"], 5)
                     forecast.append(entry)
-                except Exception:
+                except Exception as err:
+                    _LOGGER.debug("Skipping unparsable forecast entry %s: %s", fcast, err)
                     continue
             attributes["forecast"] = forecast
             attributes["forecastcount"] = len(forecast)

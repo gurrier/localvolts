@@ -76,10 +76,19 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 errors["nmi_id"] = "invalid_nmi_id"
 
             if not errors:
-                return self.async_create_entry(title="", data=user_input)
+                # Credentials live in config_entry.data (that's what
+                # async_setup_entry reads) - OptionsFlow.async_create_entry
+                # only writes config_entry.options, which is never read, so
+                # update .data directly and reload for the change to
+                # actually take effect.
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=user_input
+                )
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                return self.async_create_entry(title="", data={})
 
-        # Use current options or entry data as defaults
-        cur = {**self.config_entry.data, **self.config_entry.options}
+        # Defaults reflect what's actually in use (config_entry.data)
+        cur = self.config_entry.data
 
         return self.async_show_form(
             step_id="init",

@@ -67,9 +67,6 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from the API endpoint."""
-        api_key = self.api_key
-        partner_id = self.partner_id
-        nmi_id = self.nmi_id
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
         from_time: datetime.datetime = current_utc_time
@@ -88,12 +85,12 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
             url: str = (
                 f"https://api.localvolts.com/v1/customer/interval?"
-                f"NMI={nmi_id}&from={from_time_str}&to={to_time_str}"
+                f"NMI={self.nmi_id}&from={from_time_str}&to={to_time_str}"
             )
 
             headers: Dict[str, str] = {
-                "Authorization": f"apikey {api_key}",
-                "partner": partner_id,
+                "Authorization": f"apikey {self.api_key}",
+                "partner": self.partner_id,
             }
 
             try:
