@@ -147,34 +147,15 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
+        """Return every field the API returned for the current interval.
+
+        Unlike the forecast sensor's list of ~287 intervals, this is a
+        single interval's worth of scalar fields, so the payload stays
+        small - no need for an allowlist.
         """
-        Return limited attributes to avoid exceeding size limits.
-        
-        Only include essential fields to prevent database performance issues.
-        """
-        attrs: dict[str, Any] = {}
-        
-        # Only include critical fields that are needed
-        if self.coordinator.intervalEnd:
-            attrs["intervalEnd"] = self.coordinator.intervalEnd.isoformat()
-            
-        if self.coordinator.lastUpdate:
-            attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
-            
-        # Only include a few key fields from data, not all of them
         data = getattr(self.coordinator, "data", {}) or {}
         data = data.get("exp", data) or {}
-        critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval"]
-        
-        for field in critical_fields:
-            if field in data:
-                value = data[field]
-                if hasattr(value, "isoformat"):
-                    attrs[field] = value.isoformat()
-                else:
-                    attrs[field] = value
-                    
-        return attrs
+        return dict(data)
 
 class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
