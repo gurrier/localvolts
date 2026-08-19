@@ -95,16 +95,6 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
         self._attr_name = COSTS_FLEX_UP
         self._attr_unique_id = f"{coordinator.nmi_id}_{COSTS_FLEX_UP}"
 
-    @property
-    def extra_state_attributes(self):
-        """Extend base attributes with demandInterval if available."""
-        attributes = super().extra_state_attributes
-        item = self.coordinator.data.get("exp", self.coordinator.data)
-        demand_interval = item.get("demandInterval") if item else None
-        if demand_interval is not None:
-            attributes["demandInterval"] = demand_interval
-        return attributes
-
 class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring earningsFlexUp."""
 
