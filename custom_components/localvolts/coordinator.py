@@ -99,14 +99,22 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 session = async_get_clientsession(self.hass)
                 async with session.get(url, headers=headers) as response:
-                    if response.status == 401:
+                    # The Localvolts API returns auth failures (missing/invalid
+                    # API key or partner id) as HTTP 500 with the specific
+                    # reason as plain text in the body, e.g. "Invalid API Key
+                    # (partner: 1234)" or "Unregistered partner: 1234". 401/403
+                    # are kept as a defensive fallback in case that ever
+                    # changes, but per the API docs 500 is what's actually
+                    # sent.
+                    if response.status in (401, 403, 500):
+                        error_text = (await response.text()).strip()
                         _LOGGER.critical(
-                            "Unauthorized access: Check your API key.")
+                            "Localvolts API authentication error (HTTP %s): %s",
+                            response.status, error_text,
+                        )
                         raise UpdateFailed(
-                            "Unauthorized access: Invalid API key.")
-                    elif response.status == 403:
-                        _LOGGER.critical("Forbidden: Check your Partner ID.")
-                        raise UpdateFailed("Forbidden: Invalid Partner ID.")
+                            f"Localvolts API authentication error: {error_text or response.status}"
+                        )
 
                     response.raise_for_status()
                     data: Any = await response.json()
