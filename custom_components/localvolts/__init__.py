@@ -83,20 +83,23 @@ async def async_setup_entry(hass, config_entry):
         _LOGGER.error("Error initializing coordinator: %s", err)
         return False
 
-    # Store data
+    # Store data, keyed by entry_id - a single "coordinator" key here would
+    # collide between multiple config entries (e.g. two NMIs), with the
+    # second entry's setup silently overwriting the first's coordinator for
+    # both. See gurrier/localvolts#22.
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]['coordinator'] = coordinator
+    hass.data[DOMAIN][config_entry.entry_id] = coordinator
 
     # Load the sensor platform
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
-    
+
     return True
 
 async def async_unload_entry(hass: HomeAssistant, config_entry):
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(config_entry, ["sensor"])
     if unload_ok and DOMAIN in hass.data:
-        hass.data[DOMAIN].pop("coordinator", None)
+        hass.data[DOMAIN].pop(config_entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
     return unload_ok
