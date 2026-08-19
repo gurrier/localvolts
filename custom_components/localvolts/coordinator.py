@@ -39,6 +39,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
         self.data: Dict[str, Any] = {}
         self.forecast_data: List[Dict[str, Any]] = []
+        self._last_notified_key: Any = None
 
         super().__init__(
             hass,
@@ -46,6 +47,23 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             name="Localvolts Data",
             update_interval=SCAN_INTERVAL,
         )
+
+    def async_update_listeners(self) -> None:
+        """Notify entities only when something actually changed.
+
+        Polling runs every 10s so a new interval's price data is picked up
+        with minimal delay, but the API is only actually queried once per
+        5-minute interval - the other ~29 polls out of 30 return unchanged
+        data. Without this, every entity re-writes state and pushes its
+        (now large, for the forecast sensor) attributes on every single
+        poll. Key includes last_update_success so failures/recoveries are
+        still always reported immediately.
+        """
+        key = (self.intervalEnd, len(self.forecast_data), self.last_update_success)
+        if key == self._last_notified_key:
+            return
+        self._last_notified_key = key
+        super().async_update_listeners()
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from the API endpoint."""
