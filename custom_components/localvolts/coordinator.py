@@ -37,7 +37,14 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
-        self.data: Dict[str, Any] = {}
+        # NOTE: deliberately not named `self.data` - the DataUpdateCoordinator
+        # base class overwrites `self.data` with whatever _async_update_data()
+        # returns after every poll. Since we return {"exp": ..., "fcst": ...},
+        # reusing `self.data` for the raw current-interval item here would
+        # self-collide: the wrapped dict from the last poll would get wrapped
+        # again on the next one, nesting deeper every poll where no fresh
+        # interval data arrives.
+        self.interval_data: Dict[str, Any] = {}
         self.forecast_data: List[Dict[str, Any]] = []
         self._last_notified_key: Any = None
 
@@ -146,7 +153,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     # Update variables
                     self.intervalEnd = interval_end
                     self.lastUpdate = last_update_time
-                    self.data = item
+                    self.interval_data = item
 
                     interval_start: datetime.datetime = interval_end - \
                         datetime.timedelta(minutes=5)
@@ -169,9 +176,10 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 
-        # Return both exp data and forecast data
-        # The coordinator will make this available to sensors
+        # Return both exp data and forecast data. This becomes `self.data`
+        # (the base class assigns it), so it must never read `self.data`
+        # itself - see the note on self.interval_data in __init__.
         return {
-            "exp": self.data,
+            "exp": self.interval_data,
             "fcst": self.forecast_data
         }
