@@ -93,7 +93,8 @@ class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     def extra_state_attributes(self):
         """Extend base attributes with demandInterval if available."""
         attributes = super().extra_state_attributes
-        demand_interval = self.coordinator.data.get("demandInterval")
+        item = self.coordinator.data.get("exp", self.coordinator.data)
+        demand_interval = item.get("demandInterval") if item else None
         if demand_interval is not None:
             attributes["demandInterval"] = demand_interval
         return attributes
@@ -173,7 +174,8 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
             attrs["lastUpdate"] = self.coordinator.lastUpdate.isoformat()
             
         # Only include a few key fields from data, not all of them
-        data = getattr(self.coordinator, "data", {})
+        data = getattr(self.coordinator, "data", {}) or {}
+        data = data.get("exp", data) or {}
         critical_fields = ["costsFlexUp", "earningsFlexUp", "demandInterval", "intervalStart"]
         
         for field in critical_fields:

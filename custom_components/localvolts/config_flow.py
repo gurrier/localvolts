@@ -3,11 +3,8 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.selector import selector
 
-from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID
+from .const import DOMAIN
 from . import validate_api_key, validate_partner_id, validate_nmi_id
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,10 +22,16 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not api_key:
                 errors["api_key"] = "required"
+            elif not validate_api_key(api_key):
+                errors["api_key"] = "invalid_api_key"
             if not partner_id:
                 errors["partner_id"] = "required"
+            elif not validate_partner_id(partner_id):
+                errors["partner_id"] = "invalid_partner_id"
             if not nmi_id:
                 errors["nmi_id"] = "required"
+            elif not validate_nmi_id(nmi_id):
+                errors["nmi_id"] = "invalid_nmi_id"
 
             if not errors:
                 return self.async_create_entry(title="LocalVolts", data=user_input)
@@ -61,10 +64,16 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
 
             if not api_key:
                 errors["api_key"] = "required"
+            elif not validate_api_key(api_key):
+                errors["api_key"] = "invalid_api_key"
             if not partner_id:
                 errors["partner_id"] = "required"
+            elif not validate_partner_id(partner_id):
+                errors["partner_id"] = "invalid_partner_id"
             if not nmi_id:
                 errors["nmi_id"] = "required"
+            elif not validate_nmi_id(nmi_id):
+                errors["nmi_id"] = "invalid_nmi_id"
 
             if not errors:
                 return self.async_create_entry(title="", data=user_input)

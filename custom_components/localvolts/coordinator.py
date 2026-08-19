@@ -11,7 +11,6 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .const import DOMAIN
 
 import aiohttp
 
@@ -25,13 +24,16 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
     def __init__(
         self,
-        hass
+        hass,
+        api_key: str,
+        partner_id: str,
+        nmi_id: str,
     ) -> None:
         """Initialize the coordinator."""
         self.hass = hass
-        self.api_key: str = self.hass.data[DOMAIN]["api_key"]
-        self.partner_id = self.hass.data[DOMAIN]["partner_id"]
-        self.nmi_id: str = self.hass.data[DOMAIN]["nmi_id"]
+        self.api_key: str = api_key
+        self.partner_id: str = partner_id
+        self.nmi_id: str = nmi_id
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
@@ -46,10 +48,10 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        api_key: str = self.hass.data[DOMAIN]["api_key"]
-        partner_id = self.hass.data[DOMAIN]["partner_id"]
-        nmi_id: str = self.hass.data[DOMAIN]["nmi_id"]
         """Fetch data from the API endpoint."""
+        api_key = self.api_key
+        partner_id = self.partner_id
+        nmi_id = self.nmi_id
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
         from_time: datetime.datetime = current_utc_time

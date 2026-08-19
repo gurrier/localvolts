@@ -1,13 +1,10 @@
 """The localvolts integration."""
 
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers.template import Template, render_complex
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
-from datetime import time, timedelta
+from homeassistant.helpers import entity_registry as er
 import logging
 import voluptuous as vol
-import aiohttp
 
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
@@ -33,6 +30,37 @@ CONFIG_SCHEMA = vol.Schema(
 
 _LOGGER = logging.getLogger(__name__)
 
+
+async def _async_migrate_unique_ids(hass: HomeAssistant, config_entry, nmi_id: str) -> None:
+    """Rename unique_ids left over from the 0.6.0/0.6.1 'localvolts_' prefix experiment.
+
+    0.6.0/0.6.1 briefly renamed every sensor's unique_id to add a "localvolts_"
+    prefix, then 0.6.2 reverted it, in both cases without a working migration
+    (the "_attr_old_unique_ids" attribute used at the time isn't a real HA
+    mechanism). This renames any entities still on a legacy id in place so
+    existing entity_ids and history are preserved instead of duplicating.
+    """
+    legacy_to_current = {
+        f"localvolts_{nmi_id}_costsFlexUp": f"{nmi_id}_costsFlexUp",
+        f"localvolts_{nmi_id}_earningsFlexUp": f"{nmi_id}_earningsFlexUp",
+        f"localvolts_{nmi_id}_datalag": f"{nmi_id}_data_lag",
+        f"{nmi_id}_datalag": f"{nmi_id}_data_lag",
+        f"localvolts_{nmi_id}_intervalend": f"{nmi_id}_interval_end",
+        f"{nmi_id}_intervalend": f"{nmi_id}_interval_end",
+        f"localvolts_{nmi_id}_forecast_costs_flex_up": f"{nmi_id}_forecast_costs_flex_up",
+    }
+
+    registry = er.async_get(hass)
+    for entry in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        new_unique_id = legacy_to_current.get(entry.unique_id)
+        if new_unique_id and new_unique_id != entry.unique_id:
+            _LOGGER.info(
+                "Migrating Localvolts entity %s unique_id %s -> %s",
+                entry.entity_id, entry.unique_id, new_unique_id,
+            )
+            registry.async_update_entity(entry.entity_id, new_unique_id=new_unique_id)
+
+
 async def async_setup_entry(hass, config_entry):
     """Set up the Localvolts integration from a config entry."""
     _LOGGER.debug("Setting up the Localvolts component from config entry.")
@@ -40,15 +68,11 @@ async def async_setup_entry(hass, config_entry):
     api_key = config_entry.data[CONF_API_KEY]
     partner_id = config_entry.data[CONF_PARTNER_ID]
     nmi_id = config_entry.data[CONF_NMI_ID]
-    
-    # Store them for global access within your integration
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["api_key"] = api_key
-    hass.data[DOMAIN]["partner_id"] = partner_id
-    hass.data[DOMAIN]["nmi_id"] = nmi_id
+
+    await _async_migrate_unique_ids(hass, config_entry, nmi_id)
 
     # Initialize coordinator
-    coordinator = LocalvoltsDataUpdateCoordinator(hass)
+    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id)
 
     try:
         await coordinator.async_refresh()
