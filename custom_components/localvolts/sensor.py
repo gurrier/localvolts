@@ -225,13 +225,19 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
                     interval_end_dt = datetime.fromisoformat(fcast["intervalEnd"].replace("Z", "+00:00"))
                     duration = int(fcast.get("intervalDuration", 5))
                     start_time_dt = interval_end_dt - timedelta(minutes=duration)
-                    forecast.append({
-                        "duration": duration,
-                        "start_time": start_time_dt.isoformat(),
-                        "end_time": interval_end_dt.isoformat(),
-                        "earningsFlexUp": round(fcast.get("earningsFlexUp", 0), 5),
-                        "costsFlexUp": round(fcast.get("costsFlexUp", 0), 5)
-                    })
+                    # Carry through every field the API returned for this interval
+                    # (not just a hand-picked subset), so nothing the API exposes
+                    # is silently dropped. duration/start_time/end_time are added
+                    # as convenience fields on top of the raw data.
+                    entry = dict(fcast)
+                    entry["duration"] = duration
+                    entry["start_time"] = start_time_dt.isoformat()
+                    entry["end_time"] = interval_end_dt.isoformat()
+                    if "earningsFlexUp" in entry:
+                        entry["earningsFlexUp"] = round(entry["earningsFlexUp"], 5)
+                    if "costsFlexUp" in entry:
+                        entry["costsFlexUp"] = round(entry["costsFlexUp"], 5)
+                    forecast.append(entry)
                 except Exception:
                     continue
             attributes["forecast"] = forecast
