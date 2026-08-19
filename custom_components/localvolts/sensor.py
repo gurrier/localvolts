@@ -71,8 +71,10 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
     @property
     def native_value(self):
         """Return the state of the sensor (scaled monetary value)."""
-        # Access the 'exp' dict if present, else fallback to previous behavior
-        item = self.coordinator.data.get("exp", self.coordinator.data)
+        # coordinator.data can be None before the first successful refresh
+        # (see gurrier/localvolts#21 - this crashed with the same shape).
+        coordinator_data = self.coordinator.data or {}
+        item = coordinator_data.get("exp", coordinator_data)
         if item:
             value = item.get(self.data_key)
             if value is not None:

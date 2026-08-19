@@ -49,11 +49,12 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return LocalvoltsOptionsFlowHandler(config_entry)
+        return LocalvoltsOptionsFlowHandler()
 
 class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
+    # No __init__/self.config_entry assignment here - manually setting it is
+    # deprecated (HA issue: "stops working in 2025.12"). OptionsFlow already
+    # provides self.config_entry as a property.
 
     async def async_step_init(self, user_input=None):
         errors = {}
