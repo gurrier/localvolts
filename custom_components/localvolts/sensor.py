@@ -207,10 +207,10 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.forecast_data:
             return None
 
-        # Get the most recent forecast data
-        latest_forecast = max(self.coordinator.forecast_data,
-                              key=lambda x: x["intervalEnd"])
-        value = latest_forecast.get("costsFlexUp")
+        # Get the next upcoming forecast interval (soonest intervalEnd)
+        next_forecast = min(self.coordinator.forecast_data,
+                            key=lambda x: x["intervalEnd"])
+        value = next_forecast.get("costsFlexUp")
         if value is not None:
             return round(value, 3)
         return None
