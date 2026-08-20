@@ -128,8 +128,6 @@ template:
             {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
 ```
 
-The `{% set forecast = ... %}` / `if forecast else ...` guard matters in practice, not just in theory: `sensor.forecasted_costs_flex_up` won't have a `forecast` attribute yet on every boot where this integration happens to load after the template integration (or hasn't completed its first successful update yet) - without the guard, `sort`/`max` throw straight into the log every time that happens.
-
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
