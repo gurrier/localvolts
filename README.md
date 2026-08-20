@@ -27,15 +27,43 @@ forecast:
     importsAllUnits: kWh
     demandMain: 1.41
     demandMainUnits: kW
+    demandPeriod: 30
+    demandPeriodUnits: minutes
     demandInterval: 1
+    earningsAll: 0
+    earningsAllUnits: cents
+    earningsAllVar: 0
+    earningsAllVarUnits: cents
+    earningsAllFixed: 0
+    earningsAllFixedUnits: cents
+    earningsAllVarRate: N/A
+    earningsAllVarRateUnits: c/kWh
     earningsFlexUp: 7.48652
     earningsFlexDown: -7.48651605
     earningsFlexUnits: c/kWh
+    costsAll: 3.54601201
+    costsAllUnits: cents
+    costsAllVar: 2.96613215
+    costsAllVarUnits: cents
+    costsAllFixed: 0.57987986
+    costsAllFixedUnits: cents
+    costsDemandMain: 39.485
+    costsDemandMainUnits: c/kW/Day
+    costsDemandRate: 39.485
+    costsDemandRateUnits: c/kW/Day
+    costsAllVarRate: '12.62183895'
+    costsAllVarRateUnits: c/kWh
     costsFlexUp: 12.62184
     costsFlexDown: -12.62183895
     costsFlexUnits: c/kWh
+    exportsAllEmissions: 0
+    exportsAllEmissionsUnits: g-CO2e
     importsAllEmissions: 166.427
     importsAllEmissionsUnits: g-CO2e
+    exportsAllZeroEE: 1
+    exportsAllZeroEEUnits: '%'
+    importsAllZeroEE: '0.21490000'
+    importsAllZeroEEUnits: '%'
     quality: Fcst
     lastUpdate: '2026-08-19 06:31:44'
     duration: 5
