@@ -7,41 +7,47 @@ The integration currently exposes five sensors...
 It's essentially the marginal cost of electricity for you and includes loss factors and network fees associated with increasing your consumption by 1kW right now.
 Of course, this only lasts until the end of the 5 minute interval, during which you would only have pulled that extra 1kW for 5 minutes which is a total energy of 1/12 kWh = 0.083kWh
 
-NOTE: If you are using the DemandInterval attribute of this sensor, please switch to the IntervalEnd sensor's attribute of the same name. The DemandInterval attribute will be deprecated from this sensor in a future release to clean up the code.
-
 2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
 3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
 
 4) intervalEnd contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
 
-5) forecasted_costs_flex_up state reflects current costsFlexUp in c/kWh. State attributes capture 5 minute forecasts for earningFlexUp and costsFlexUp in c/kWh. Also captures forecastcount (total forecasts in list)
+5) forecasted_costs_flex_up state reflects the costsFlexUp of the next upcoming 5-minute interval, in c/kWh. The `forecast` attribute is a list covering the next 24 hours, one entry per 5-minute interval, and each entry includes every field the Localvolts API returns for that interval - not just earningsFlexUp/costsFlexUp, but demand, import/export, emissions and quality data too. `forecastcount` gives the total number of entries in the list. One entry, shown in full, looks like this:
 
 ```
 forecast:
-  - duration: 5
-    start_time: "2025-09-01T21:55:00+00:00"
-    end_time: "2025-09-01T22:00:00+00:00"
-    earningsFlexUp: 22.65218
-    costsFlexUp: 32.34263
-  - duration: 5
-    start_time: "2025-09-01T22:00:00+00:00"
-    end_time: "2025-09-01T22:05:00+00:00"
-    earningsFlexUp: 20.38499
-    costsFlexUp: 29.84872
-  ...
-  - duration: 5
-    start_time: '2025-09-02T21:50:00+00:00'
-    end_time: '2025-09-02T21:55:00+00:00'
-    earningsFlexUp: 12.81728
-    costsFlexUp: 21.52423
+  - NMI: '4103326458'
+    intervalDuration: '5'
+    intervalDurationUnits: minutes
+    intervalEnd: '2026-08-19T06:40:00Z'
+    exportsAll: 0
+    exportsAllUnits: kWh
+    importsAll: 0.235
+    importsAllUnits: kWh
+    demandMain: 1.41
+    demandMainUnits: kW
+    demandInterval: 1
+    earningsFlexUp: 7.48652
+    earningsFlexDown: -7.48651605
+    earningsFlexUnits: c/kWh
+    costsFlexUp: 12.62184
+    costsFlexDown: -12.62183895
+    costsFlexUnits: c/kWh
+    importsAllEmissions: 166.427
+    importsAllEmissionsUnits: g-CO2e
+    quality: Fcst
+    lastUpdate: '2026-08-19 06:31:44'
+    duration: 5
+    start_time: '2026-08-19T06:35:00+00:00'
+    end_time: '2026-08-19T06:40:00+00:00'
+  # ...286 more entries, same shape, one per 5-minute interval out to 24 hours
 
   forecastcount: 287
   unit_of_measurement: c/kWh
   device_class: monetary
   friendly_name: Forecasted Costs Flex Up
 ```
-
 
 For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
 
@@ -53,6 +59,34 @@ template:
         state: >
           {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
         icon: mdi:clock
+```
+
+The forecast list is also handy for looking ahead rather than just at the current interval - for example, working out the highest import cost and export earning you might see over the next 24 hours, and when:
+
+```
+template:
+  - sensor:
+      - name: "Max Forecast Cost Flex Up"
+        unique_id: "max_forecast_cost_flex_up"
+        unit_of_measurement: "c/kWh"
+        state: >
+          {{ state_attr('sensor.forecasted_costs_flex_up', 'forecast')
+             | map(attribute='costsFlexUp') | max | round(3) }}
+        attributes:
+          at: >
+            {{ (state_attr('sensor.forecasted_costs_flex_up', 'forecast')
+                | sort(attribute='costsFlexUp') | last).start_time }}
+
+      - name: "Max Forecast Earnings Flex Up"
+        unique_id: "max_forecast_earnings_flex_up"
+        unit_of_measurement: "c/kWh"
+        state: >
+          {{ state_attr('sensor.forecasted_costs_flex_up', 'forecast')
+             | map(attribute='earningsFlexUp') | max | round(3) }}
+        attributes:
+          at: >
+            {{ (state_attr('sensor.forecasted_costs_flex_up', 'forecast')
+                | sort(attribute='earningsFlexUp') | last).start_time }}
 ```
 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
