@@ -77,6 +77,17 @@ forecast:
   friendly_name: Forecasted Costs Flex Up
 ```
 
+**A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. Left as-is, you'll see repeated recorder warnings in your log about oversized attributes, and Home Assistant will keep trying (and failing) to write it into the history database on every update. Since it's a rolling forecast rather than something worth graphing over time anyway, there's nothing useful to keep in history for it - exclude it in `configuration.yaml`:
+
+```yaml
+recorder:
+  exclude:
+    entities:
+      - sensor.forecasted_costs_flex_up
+```
+
+The other sensors (`costsFlexUp`, `earningsFlexUp`, `dataLag`, `intervalEnd`) stay small even with the full set of fields now included, so there's no need to exclude those too.
+
 For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
 
 ```
