@@ -98,24 +98,26 @@ template:
         unique_id: "max_forecast_cost_flex_up"
         unit_of_measurement: "c/kWh"
         state: >
-          {{ state_attr('sensor.forecasted_costs_flex_up', 'forecast')
-             | map(attribute='costsFlexUp') | max | round(3) }}
+          {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
+          {{ (forecast | map(attribute='costsFlexUp') | max | round(3)) if forecast else 0 }}
         attributes:
           at: >
-            {{ (state_attr('sensor.forecasted_costs_flex_up', 'forecast')
-                | sort(attribute='costsFlexUp') | last).start_time }}
+            {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
+            {{ (forecast | sort(attribute='costsFlexUp') | last).start_time if forecast else None }}
 
       - name: "Max Forecast Earnings Flex Up"
         unique_id: "max_forecast_earnings_flex_up"
         unit_of_measurement: "c/kWh"
         state: >
-          {{ state_attr('sensor.forecasted_costs_flex_up', 'forecast')
-             | map(attribute='earningsFlexUp') | max | round(3) }}
+          {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
+          {{ (forecast | map(attribute='earningsFlexUp') | max | round(3)) if forecast else 0 }}
         attributes:
           at: >
-            {{ (state_attr('sensor.forecasted_costs_flex_up', 'forecast')
-                | sort(attribute='earningsFlexUp') | last).start_time }}
+            {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
+            {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
 ```
+
+The `{% set forecast = ... %}` / `if forecast else ...` guard matters in practice, not just in theory: `sensor.forecasted_costs_flex_up` won't have a `forecast` attribute yet on every boot where this integration happens to load after the template integration (or hasn't completed its first successful update yet) - without the guard, `sort`/`max` throw straight into the log every time that happens.
 
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
