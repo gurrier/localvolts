@@ -1,6 +1,8 @@
 # Localvolts
 An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=%40gurrier&repository=localvolts&category=integration)
+
 The integration currently exposes five sensors...
 
 1) costsFlexUp is the marginal IMPORT cost of electricity for you, in $/kWh (including loss factors and network fees) - how much extra your bill increases for each additional kWh you import between now and the end of the current 5-minute interval.
@@ -133,9 +135,17 @@ and request an API key using this form https://localvolts.com/localvolts-api/
 
 # Using HACS to install the Localvolts Integration
 
-If you already have HACS installed for Home Assistant you can add this integration as a custom repository
+This integration is available directly in HACS's default store - no need to add it as a custom repository.
 
 In HACS,
+
+1. Go to the "Integrations" section.
+2. Search for "Localvolts".
+3. Click it, then "Download".
+
+Or click the badge at the top of this page to jump straight to it from your own Home Assistant instance.
+
+If you'd rather add it manually as a custom repository instead (for example, to track a specific branch), that still works too:
 
 1. Click on the 3 dots in the top right corner.
 2. Select "Custom repositories"
@@ -143,7 +153,7 @@ In HACS,
 4. Select the integration category.
 5. Click the "ADD" button.
 
-Now you can browse for and install Localvolts in Home Assistant using HACS
+Either way, once added you can browse for and install Localvolts in Home Assistant using HACS
 
 # A setup dialog will appear to allow you to configure the three settings below (no longer necessary to edit configuration.yaml).
 
@@ -163,8 +173,3 @@ Look for the sensors (sensor.costsFlexUp and sensor.earningsFlexUp) in Home Assi
 
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
-
-
-<!-- HIDDEN until ready on HACS
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=%40gurrier&repository=localvolts&category=integration)
--->
