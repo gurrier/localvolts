@@ -133,19 +133,19 @@ template:
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
-# Using HACS to install the Localvolts Integration
+# Installing the Localvolts Integration
 
-This integration is available directly in HACS's default store - no need to add it as a custom repository.
+The quickest way: click the badge below to open HACS on your own Home Assistant instance with this repository ready to install.
 
-In HACS,
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
 
-1. Go to the "Integrations" section.
+Or install manually through HACS:
+
+1. Open HACS, go to the "Integrations" section.
 2. Search for "Localvolts".
 3. Click it, then "Download".
 
-Or click the badge at the top of this page to jump straight to it from your own Home Assistant instance.
-
-If you'd rather add it manually as a custom repository instead (for example, to track a specific branch), that still works too:
+If you'd rather add it as a custom repository instead (for example, to track a specific branch), that still works too:
 
 1. Click on the 3 dots in the top right corner.
 2. Select "Custom repositories"
