@@ -130,6 +130,29 @@ template:
             {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
 ```
 
+**Optional: feeding forecasts into EMHASS.** If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
+
+```yaml
+template:
+  - sensor:
+      - name: "EMHASS Price Forecasts"
+        unique_id: "emhass_price_forecasts"
+        state: "ok"
+        attributes:
+          load_cost_forecast: >
+            {% set ns = namespace(cost={}) %}
+            {% for i in state_attr('sensor.forecasted_costs_flex_up', 'forecast') or [] %}
+              {% set ns.cost = ns.cost | combine({i.start_time: (i.costsFlexUp / 100) | round(4)}) %}
+            {% endfor %}
+            {{ ns.cost }}
+          prod_price_forecast: >
+            {% set ns = namespace(price={}) %}
+            {% for i in state_attr('sensor.forecasted_costs_flex_up', 'forecast') or [] %}
+              {% set ns.price = ns.price | combine({i.start_time: (i.earningsFlexUp / 100) | round(4)}) %}
+            {% endfor %}
+            {{ ns.price }}
+```
+
 To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
 and request an API key using this form https://localvolts.com/localvolts-api/
 
