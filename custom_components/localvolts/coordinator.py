@@ -135,44 +135,49 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed(f"Error communicating with API: {e}") from e
 
             # Process data
-            new_data_found = False
             # Clear existing forecast data to prevent duplicates
             self.forecast_data.clear()
             for item in data:
-                if item.get("quality", "").lower() == "exp":
-                    interval_end = parser.isoparse(item["intervalEnd"])
-                    last_update_time = parser.isoparse(item["lastUpdate"])
+                quality = item.get("quality", "").lower()
+                try:
+                    if quality == "exp":
+                        interval_end = parser.isoparse(item["intervalEnd"])
+                        last_update_time = parser.isoparse(item["lastUpdate"])
 
-                    # Ensure timezone awareness
-                    if interval_end.tzinfo is None:
-                        interval_end = interval_end.replace(tzinfo=tz.UTC)
-                    if last_update_time.tzinfo is None:
-                        last_update_time = last_update_time.replace(
-                            tzinfo=tz.UTC)
+                        # Ensure timezone awareness
+                        if interval_end.tzinfo is None:
+                            interval_end = interval_end.replace(tzinfo=tz.UTC)
+                        if last_update_time.tzinfo is None:
+                            last_update_time = last_update_time.replace(
+                                tzinfo=tz.UTC)
 
-                    # Update variables
-                    self.intervalEnd = interval_end
-                    self.lastUpdate = last_update_time
-                    self.interval_data = item
+                        # Update variables
+                        self.intervalEnd = interval_end
+                        self.lastUpdate = last_update_time
+                        self.interval_data = item
 
-                    interval_start: datetime.datetime = interval_end - \
-                        datetime.timedelta(minutes=5)
-                    self.time_past_start = last_update_time - interval_start
-                    _LOGGER.debug(
-                        "Data updated: intervalEnd=%s, lastUpdate=%s",
-                        self.intervalEnd,
-                        self.lastUpdate,
-                    )
-                    new_data_found = True
-                elif item.get("quality", "").lower() == "fcst":
-                    # Store forecast data
-                    self.forecast_data.append(item)
-                    _LOGGER.debug(
-                        "Stored forecast data: intervalEnd=%s", item["intervalEnd"])
-                else:
-                    _LOGGER.debug(
-                        "Skipping non-'exp' and non-'fcst' quality data. Only 'exp' and 'fcst' are processed."
-                    )
+                        duration = int(item.get("intervalDuration", 5))
+                        interval_start: datetime.datetime = interval_end - \
+                            datetime.timedelta(minutes=duration)
+                        self.time_past_start = last_update_time - interval_start
+                        _LOGGER.debug(
+                            "Data updated: intervalEnd=%s, lastUpdate=%s",
+                            self.intervalEnd,
+                            self.lastUpdate,
+                        )
+                    elif quality == "fcst":
+                        # Store forecast data
+                        self.forecast_data.append(item)
+                        _LOGGER.debug(
+                            "Stored forecast data: intervalEnd=%s", item["intervalEnd"])
+                    else:
+                        _LOGGER.debug(
+                            "Skipping non-'exp' and non-'fcst' quality data. Only 'exp' and 'fcst' are processed."
+                        )
+                except (KeyError, ValueError, TypeError) as err:
+                    _LOGGER.warning(
+                        "Skipping malformed interval record %s: %s", item, err)
+                    continue
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 

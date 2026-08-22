@@ -178,9 +178,14 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.forecast_data:
             return None
 
-        # Get the next upcoming forecast interval (soonest intervalEnd)
-        next_forecast = min(self.coordinator.forecast_data,
-                            key=lambda x: x["intervalEnd"])
+        try:
+            # Get the next upcoming forecast interval (soonest intervalEnd)
+            next_forecast = min(self.coordinator.forecast_data,
+                                key=lambda x: x["intervalEnd"])
+        except (KeyError, TypeError) as err:
+            _LOGGER.debug("Could not determine next forecast interval: %s", err)
+            return None
+
         value = next_forecast.get("costsFlexUp")
         if value is not None:
             return round(value, 3)
