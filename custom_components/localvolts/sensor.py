@@ -16,13 +16,17 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
 MONETARY_CONVERSION_FACTOR = 100
 
 COSTS_FLEX_UP = "costsFlexUp"
 EARNINGS_FLEX_UP = "earningsFlexUp"
+
+# These entities only ever read from the coordinator's already-fetched data,
+# they never make their own API calls, so there's no reason to limit how
+# many can update concurrently.
+PARALLEL_UPDATES = 0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +47,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Localvolts sensors from a config entry."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
 
     async_add_entities(
         [
