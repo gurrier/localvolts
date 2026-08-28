@@ -72,6 +72,13 @@ async def async_setup_entry(hass, config_entry):
 
     await _async_migrate_unique_ids(hass, config_entry, nmi_id)
 
+    # Entries created before the config entry itself carried a unique_id
+    # (tied to the NMI) have none set, so the duplicate-NMI check in
+    # config_flow.py can't see them as already configured. Backfill it here
+    # so that protection actually covers entries that predate it.
+    if config_entry.unique_id != nmi_id:
+        hass.config_entries.async_update_entry(config_entry, unique_id=nmi_id)
+
     # Read the version from the manifest rather than hardcoding it anywhere
     # else, so the User-Agent sent to the Localvolts API always matches
     # whatever's actually installed with no separate value to keep in sync.
