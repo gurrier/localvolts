@@ -3,6 +3,7 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.loader import async_get_integration
 import logging
 import voluptuous as vol
 
@@ -71,8 +72,14 @@ async def async_setup_entry(hass, config_entry):
 
     await _async_migrate_unique_ids(hass, config_entry, nmi_id)
 
+    # Read the version from the manifest rather than hardcoding it anywhere
+    # else, so the User-Agent sent to the Localvolts API always matches
+    # whatever's actually installed with no separate value to keep in sync.
+    integration = await async_get_integration(hass, DOMAIN)
+    version = str(integration.version) if integration.version else "unknown"
+
     # Initialize coordinator
-    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id)
+    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id, version)
 
     try:
         await coordinator.async_refresh()

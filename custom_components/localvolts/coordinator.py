@@ -28,12 +28,14 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         api_key: str,
         partner_id: str,
         nmi_id: str,
+        version: str = "unknown",
     ) -> None:
         """Initialize the coordinator."""
         self.hass = hass
         self.api_key: str = api_key
         self.partner_id: str = partner_id
         self.nmi_id: str = nmi_id
+        self.user_agent: str = f"ha-localvolts/{version} (+https://github.com/gurrier/localvolts)"
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
@@ -98,6 +100,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             headers: Dict[str, str] = {
                 "Authorization": f"apikey {self.api_key}",
                 "partner": self.partner_id,
+                "User-Agent": self.user_agent,
             }
 
             try:
