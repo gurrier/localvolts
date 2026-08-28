@@ -79,6 +79,12 @@ async def async_setup_entry(hass, config_entry):
     if config_entry.unique_id != nmi_id:
         hass.config_entries.async_update_entry(config_entry, unique_id=nmi_id)
 
+    # Entries created before entry titles included the NMI are stuck on the
+    # generic "LocalVolts" - upgrade those, but only that exact default, so
+    # a title someone's already customised themselves is left alone.
+    if config_entry.title == "LocalVolts":
+        hass.config_entries.async_update_entry(config_entry, title=f"LocalVolts ({nmi_id})")
+
     # Read the version from the manifest rather than hardcoding it anywhere
     # else, so the User-Agent sent to the Localvolts API always matches
     # whatever's actually installed with no separate value to keep in sync.
