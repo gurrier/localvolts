@@ -16,6 +16,49 @@ import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
+
+class LocalvoltsAuthError(Exception):
+    """Raised when the API rejects the given API key or partner ID."""
+
+
+async def async_validate_credentials(hass: HomeAssistant, api_key: str, partner_id: str, nmi_id: str) -> None:
+    """Make a single, minimal real request to confirm these credentials actually work.
+
+    Used by the config flow to catch bad credentials at setup time instead
+    of only discovering them once the coordinator's first refresh fails.
+    Deliberately kept separate from the coordinator's own fetch logic below
+    - this only needs a tiny time window, not a full 24h forecast, and
+    duplicating the few lines involved is safer than reshaping the
+    coordinator's already-tuned fetch path just to share it.
+
+    Raises LocalvoltsAuthError if the API rejects the key/partner, or
+    ValueError if the NMI is accepted but returns no data. aiohttp.ClientError
+    (network failures, bad HTTP status) propagates as-is.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    from_time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    to_time_str = (now + datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = (
+        f"https://api.localvolts.com/v1/customer/interval?"
+        f"NMI={nmi_id}&from={from_time_str}&to={to_time_str}"
+    )
+    headers = {
+        "Authorization": f"apikey {api_key}",
+        "partner": partner_id,
+        "User-Agent": "ha-localvolts/config-flow-validation (+https://github.com/gurrier/localvolts)",
+    }
+
+    session = async_get_clientsession(hass)
+    async with session.get(url, headers=headers) as response:
+        if response.status in (401, 403, 500):
+            raise LocalvoltsAuthError((await response.text()).strip())
+        response.raise_for_status()
+        data = await response.json()
+
+    if isinstance(data, list) and not data:
+        raise ValueError("No data received: Invalid NMI?")
+
+
 SCAN_INTERVAL = datetime.timedelta(seconds=10)  # Used only until the first successful fetch, before any interval boundary is known.
 
 # Localvolts has never been observed publishing fresh data for a new interval

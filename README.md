@@ -196,3 +196,12 @@ Look for the sensors (sensor.costsFlexUp and sensor.earningsFlexUp) in Home Assi
 
 
 Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
+
+# Removing the Localvolts Integration
+
+1. Go to Settings → Devices & Services → Localvolts, click the three dots, and select "Delete". This removes the config entry and its sensors.
+2. If you installed via HACS, go to HACS → Integrations → Localvolts, click the three dots, and select "Remove" to delete the integration's files too.
+3. If you installed manually, delete the `custom_components/localvolts` folder from your Home Assistant config directory.
+4. Restart Home Assistant.
+
+If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` (see above), remove that too since the entity will no longer exist.

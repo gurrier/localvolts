@@ -1,40 +1,77 @@
 import logging
 import voluptuous as vol
 
+import aiohttp
+
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
 from . import validate_api_key, validate_partner_id, validate_nmi_id
+from .coordinator import LocalvoltsAuthError, async_validate_credentials
 
 _LOGGER = logging.getLogger(__name__)
-    
+
+
+async def _async_validate_input(hass: HomeAssistant, user_input: dict) -> dict:
+    """Check field formats, then make a real API call to confirm they work.
+
+    Shared between the initial config flow and the options (reconfigure)
+    flow, since both collect and validate the same three fields the same
+    way. Returns a dict of field-name -> error code, empty if everything's
+    good.
+    """
+    errors: dict = {}
+    api_key = user_input.get("api_key")
+    partner_id = user_input.get("partner_id")
+    nmi_id = user_input.get("nmi_id")
+
+    if not api_key:
+        errors["api_key"] = "required"
+    elif not validate_api_key(api_key):
+        errors["api_key"] = "invalid_api_key"
+    if not partner_id:
+        errors["partner_id"] = "required"
+    elif not validate_partner_id(partner_id):
+        errors["partner_id"] = "invalid_partner_id"
+    if not nmi_id:
+        errors["nmi_id"] = "required"
+    elif not validate_nmi_id(nmi_id):
+        errors["nmi_id"] = "invalid_nmi_id"
+
+    if errors:
+        return errors
+
+    try:
+        await async_validate_credentials(hass, api_key, partner_id, nmi_id)
+    except LocalvoltsAuthError as err:
+        # Mirrors the API's own documented error text (see coordinator.py)
+        # to tell an invalid key apart from an unregistered partner.
+        message = str(err).lower()
+        if "api key" in message:
+            errors["api_key"] = "invalid_api_key"
+        elif "partner" in message:
+            errors["partner_id"] = "invalid_partner_id"
+        else:
+            errors["base"] = "cannot_connect"
+    except ValueError:
+        errors["nmi_id"] = "invalid_nmi_id"
+    except aiohttp.ClientError:
+        errors["base"] = "cannot_connect"
+
+    return errors
+
+
 class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            # Validate required fields
-            api_key = user_input.get("api_key")
-            partner_id = user_input.get("partner_id")
-            nmi_id = user_input.get("nmi_id")
-
-            if not api_key:
-                errors["api_key"] = "required"
-            elif not validate_api_key(api_key):
-                errors["api_key"] = "invalid_api_key"
-            if not partner_id:
-                errors["partner_id"] = "required"
-            elif not validate_partner_id(partner_id):
-                errors["partner_id"] = "invalid_partner_id"
-            if not nmi_id:
-                errors["nmi_id"] = "required"
-            elif not validate_nmi_id(nmi_id):
-                errors["nmi_id"] = "invalid_nmi_id"
+            errors = await _async_validate_input(self.hass, user_input)
 
             if not errors:
-                await self.async_set_unique_id(nmi_id)
+                await self.async_set_unique_id(user_input["nmi_id"])
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title="LocalVolts", data=user_input)
 
@@ -61,22 +98,7 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         errors = {}
         if user_input is not None:
-            api_key = user_input.get("api_key")
-            partner_id = user_input.get("partner_id")
-            nmi_id = user_input.get("nmi_id")
-
-            if not api_key:
-                errors["api_key"] = "required"
-            elif not validate_api_key(api_key):
-                errors["api_key"] = "invalid_api_key"
-            if not partner_id:
-                errors["partner_id"] = "required"
-            elif not validate_partner_id(partner_id):
-                errors["partner_id"] = "invalid_partner_id"
-            if not nmi_id:
-                errors["nmi_id"] = "required"
-            elif not validate_nmi_id(nmi_id):
-                errors["nmi_id"] = "invalid_nmi_id"
+            errors = await _async_validate_input(self.hass, user_input)
 
             if not errors:
                 # Credentials live in config_entry.data (that's what
