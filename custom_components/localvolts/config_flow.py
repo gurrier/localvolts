@@ -141,7 +141,10 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(nmi_id)
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
-            title="LocalVolts",
+            # Includes the NMI so multiple entries (one per site) are
+            # distinguishable in the integrations list, not all just
+            # "LocalVolts".
+            title=f"LocalVolts ({nmi_id})",
             data={
                 "api_key": self._api_key,
                 "partner_id": self._partner_id,
