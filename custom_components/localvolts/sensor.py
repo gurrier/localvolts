@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -93,8 +94,12 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
 class LocalvoltsCostsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring costsFlexUp."""
 
+    # A price rate ($/kWh), not a monetary amount - MONETARY expects a plain
+    # ISO 4217 currency code as its unit, which this isn't. Matches the
+    # native_unit_of_measurement/state_class pairing used by Amber
+    # Electric's own core integration for the same kind of sensor.
     _attr_native_unit_of_measurement = "$/kWh"
-    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, COSTS_FLEX_UP)
@@ -105,7 +110,7 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
     """Sensor for monitoring earningsFlexUp."""
 
     _attr_native_unit_of_measurement = "$/kWh"
-    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator, EARNINGS_FLEX_UP)
@@ -167,7 +172,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
 
     _attr_native_unit_of_measurement = "c/kWh"
-    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_name = "Forecasted Costs Flex Up"
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
