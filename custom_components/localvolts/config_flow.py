@@ -34,6 +34,8 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["nmi_id"] = "invalid_nmi_id"
 
             if not errors:
+                await self.async_set_unique_id(nmi_id)
+                self._abort_if_unique_id_configured()
                 return self.async_create_entry(title="LocalVolts", data=user_input)
 
         return self.async_show_form(
