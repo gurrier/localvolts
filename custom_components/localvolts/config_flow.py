@@ -165,16 +165,34 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
             errors = await _async_validate_input(self.hass, user_input)
 
             if not errors:
-                # Credentials live in config_entry.data (that's what
-                # async_setup_entry reads) - OptionsFlow.async_create_entry
-                # only writes config_entry.options, which is never read, so
-                # update .data directly and reload for the change to
-                # actually take effect.
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=user_input
-                )
-                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                return self.async_create_entry(title="", data={})
+                new_nmi_id = user_input["nmi_id"]
+                nmi_changed = new_nmi_id != self.config_entry.data.get("nmi_id")
+
+                # Changing the NMI here would otherwise leave this entry's
+                # own unique_id pointing at the old NMI - silently breaking
+                # the duplicate-NMI check both ways: the old NMI would look
+                # falsely "already configured" if re-added, and the new NMI
+                # wouldn't look configured at all even though it now is.
+                if nmi_changed and any(
+                    entry.unique_id == new_nmi_id
+                    for entry in self.hass.config_entries.async_entries(DOMAIN)
+                    if entry.entry_id != self.config_entry.entry_id
+                ):
+                    errors["nmi_id"] = "already_configured"
+                else:
+                    # Credentials live in config_entry.data (that's what
+                    # async_setup_entry reads) - OptionsFlow.async_create_entry
+                    # only writes config_entry.options, which is never read, so
+                    # update .data directly and reload for the change to
+                    # actually take effect.
+                    update_kwargs = {"data": user_input}
+                    if nmi_changed:
+                        update_kwargs["unique_id"] = new_nmi_id
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, **update_kwargs
+                    )
+                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                    return self.async_create_entry(title="", data={})
 
         # Defaults reflect what's actually in use (config_entry.data)
         cur = self.config_entry.data
