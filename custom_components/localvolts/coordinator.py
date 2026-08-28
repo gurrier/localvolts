@@ -168,6 +168,11 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     async def _fetch_update_data(self) -> Dict[str, Any]:
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
+        # No known boundary yet means this fetch is a startup catch-up for
+        # whatever interval happens to already be in progress, not a fresh
+        # boundary crossing - measuring dataLag against it would just show
+        # how far into the interval we happened to boot, not a real lag.
+        is_startup: bool = self.intervalEnd is None
         from_time: datetime.datetime = current_utc_time
         to_time: datetime.datetime = current_utc_time + datetime.timedelta(hours=24) - datetime.timedelta(minutes=5)
 
@@ -252,7 +257,8 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         duration = int(item.get("intervalDuration", 5))
                         interval_start: datetime.datetime = interval_end - \
                             datetime.timedelta(minutes=duration)
-                        self.time_past_start = last_update_time - interval_start
+                        if not is_startup:
+                            self.time_past_start = last_update_time - interval_start
                         _LOGGER.debug(
                             "Data updated: intervalEnd=%s, lastUpdate=%s",
                             self.intervalEnd,
