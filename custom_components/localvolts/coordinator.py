@@ -16,7 +16,28 @@ import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = datetime.timedelta(seconds=10)  # Update every 10 seconds
+SCAN_INTERVAL = datetime.timedelta(seconds=10)  # Used only until the first successful fetch, before any interval boundary is known.
+
+# Localvolts has never been observed publishing fresh data for a new interval
+# faster than 11s after it starts (from a real dataLag sample spanning 200+
+# intervals - 11s was the minimum ever seen), so there's nothing to gain by
+# polling before this passes - instead of polling constantly, sleep through
+# the rest of each interval and wake up right as this window ends.
+POST_BOUNDARY_DEAD_WINDOW = datetime.timedelta(seconds=11)
+# Once past the dead window, retry at this tighter cadence until fresh data
+# for the new interval arrives. Localvolts' reported dataLag appears to
+# reflect when it served the response rather than a fixed publish instant
+# (observed dataLag values cluster on our own poll grid rather than varying
+# independently of it), so tightening this should pull the effective delay
+# the user sees down further, not just how fast we detect a fixed event.
+CATCHUP_POLL_INTERVAL = datetime.timedelta(seconds=1)
+# If fresh data still hasn't arrived this long after a boundary, treat it as
+# a sign the backend is struggling rather than just running a bit slow -
+# retrying every second won't help that, so back off to a gentler cadence.
+# The slowest interval seen in a real sample was ~76s; 60s gives a margin
+# over the normal range without hammering for as long as the old 120s did.
+MAX_CATCHUP_WAIT = datetime.timedelta(seconds=60)
+SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
 
 
 class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
@@ -60,13 +81,12 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     def async_update_listeners(self) -> None:
         """Notify entities only when something actually changed.
 
-        Polling runs every 10s so a new interval's price data is picked up
-        with minimal delay, but the API is only actually queried once per
-        5-minute interval - the other ~29 polls out of 30 return unchanged
-        data. Without this, every entity re-writes state and pushes its
-        (now large, for the forecast sensor) attributes on every single
-        poll. Key includes last_update_success so failures/recoveries are
-        still always reported immediately.
+        A poll that lands during the catch-up retries right after a
+        boundary but finds no fresh data yet still counts as "no change" -
+        without this, every entity re-writes state and pushes its (now
+        large, for the forecast sensor) attributes on every such retry. Key
+        includes last_update_success so failures/recoveries are still
+        always reported immediately.
         """
         key = (self.intervalEnd, len(self.forecast_data), self.last_update_success)
         if key == self._last_notified_key:
@@ -74,8 +94,35 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_notified_key = key
         super().async_update_listeners()
 
+    def _next_update_interval(self, now: datetime.datetime) -> datetime.timedelta:
+        """Work out how long to wait before the next poll.
+
+        Sleeps through the bulk of each interval plus the known dead window
+        right after each boundary, then polls tightly until fresh data for
+        the new interval arrives, falling back to a slower cadence if that's
+        taking unusually long. Runs from a `finally` block so it's based on
+        the actual current state of self.intervalEnd/now regardless of
+        whether this attempt succeeded, found no new data, or raised.
+        """
+        if self.intervalEnd is None:
+            return SCAN_INTERVAL
+        time_to_boundary = self.intervalEnd - now
+        if time_to_boundary > datetime.timedelta(0):
+            return time_to_boundary + POST_BOUNDARY_DEAD_WINDOW
+        if -time_to_boundary > MAX_CATCHUP_WAIT:
+            return SLOW_RETRY_INTERVAL
+        return CATCHUP_POLL_INTERVAL
+
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from the API endpoint."""
+        try:
+            return await self._fetch_update_data()
+        finally:
+            self.update_interval = self._next_update_interval(
+                datetime.datetime.now(datetime.timezone.utc)
+            )
+
+    async def _fetch_update_data(self) -> Dict[str, Any]:
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
         from_time: datetime.datetime = current_utc_time
