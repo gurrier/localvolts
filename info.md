@@ -1,5 +1,7 @@
 # Localvolts
 
+☕ If this integration's useful to you, [buy me a coffee](https://ko-fi.com/gurrier).
+
 ## Overview
 Localvolts is a Home Assistant integration for customers of the Localvolts electricity retailer in Australia. It exposes real-time price and interval data so automations can make cost-aware decisions.
 
