@@ -7,8 +7,8 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
-from . import validate_api_key, validate_partner_id, validate_nmi_id
-from .coordinator import LocalvoltsAuthError, async_discover_nmis, async_validate_credentials
+from . import validate_api_key, validate_partner_id
+from .coordinator import LocalvoltsAuthError, async_discover_nmis
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,19 +24,14 @@ def _map_auth_error(err: LocalvoltsAuthError) -> dict:
     return {"base": "cannot_connect"}
 
 
-async def _async_validate_input(hass: HomeAssistant, user_input: dict) -> dict:
-    """Check field formats, then make a real API call to confirm they work.
+async def _async_discover_nmis_or_errors(hass: HomeAssistant, api_key: str, partner_id: str):
+    """Format-check api_key/partner_id, then discover the account's NMI(s).
 
-    Shared between the initial config flow and the options (reconfigure)
-    flow, since both collect and validate the same three fields the same
-    way. Returns a dict of field-name -> error code, empty if everything's
-    good.
+    Shared by the initial config flow and the options (reconfigure) flow,
+    since both now collect just these two fields and look up the NMI the
+    same way. Returns (nmis, errors) - nmis is None if errors is non-empty.
     """
     errors: dict = {}
-    api_key = user_input.get("api_key")
-    partner_id = user_input.get("partner_id")
-    nmi_id = user_input.get("nmi_id")
-
     if not api_key:
         errors["api_key"] = "required"
     elif not validate_api_key(api_key):
@@ -45,24 +40,20 @@ async def _async_validate_input(hass: HomeAssistant, user_input: dict) -> dict:
         errors["partner_id"] = "required"
     elif not validate_partner_id(partner_id):
         errors["partner_id"] = "invalid_partner_id"
-    if not nmi_id:
-        errors["nmi_id"] = "required"
-    elif not validate_nmi_id(nmi_id):
-        errors["nmi_id"] = "invalid_nmi_id"
 
     if errors:
-        return errors
+        return None, errors
 
     try:
-        await async_validate_credentials(hass, api_key, partner_id, nmi_id)
+        nmis = await async_discover_nmis(hass, api_key, partner_id)
     except LocalvoltsAuthError as err:
-        errors.update(_map_auth_error(err))
+        return None, _map_auth_error(err)
     except ValueError:
-        errors["nmi_id"] = "invalid_nmi_id"
+        return None, {"base": "no_nmi_found"}
     except aiohttp.ClientError:
-        errors["base"] = "cannot_connect"
+        return None, {"base": "cannot_connect"}
 
-    return errors
+    return nmis, {}
 
 
 class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -89,32 +80,15 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             api_key = user_input.get("api_key")
             partner_id = user_input.get("partner_id")
-
-            if not api_key:
-                errors["api_key"] = "required"
-            elif not validate_api_key(api_key):
-                errors["api_key"] = "invalid_api_key"
-            if not partner_id:
-                errors["partner_id"] = "required"
-            elif not validate_partner_id(partner_id):
-                errors["partner_id"] = "invalid_partner_id"
+            nmis, errors = await _async_discover_nmis_or_errors(self.hass, api_key, partner_id)
 
             if not errors:
-                try:
-                    nmis = await async_discover_nmis(self.hass, api_key, partner_id)
-                except LocalvoltsAuthError as err:
-                    errors.update(_map_auth_error(err))
-                except ValueError:
-                    errors["base"] = "no_nmi_found"
-                except aiohttp.ClientError:
-                    errors["base"] = "cannot_connect"
-                else:
-                    self._api_key = api_key
-                    self._partner_id = partner_id
-                    if len(nmis) == 1:
-                        return await self._async_create_entry_for_nmi(nmis[0])
-                    self._nmi_choices = nmis
-                    return await self.async_step_pick_nmi()
+                self._api_key = api_key
+                self._partner_id = partner_id
+                if len(nmis) == 1:
+                    return await self._async_create_entry_for_nmi(nmis[0])
+                self._nmi_choices = nmis
+                return await self.async_step_pick_nmi()
 
         return self.async_show_form(
             step_id="user",
@@ -162,50 +136,88 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     # deprecated (HA issue: "stops working in 2025.12"). OptionsFlow already
     # provides self.config_entry as a property.
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._api_key: str | None = None
+        self._partner_id: str | None = None
+        self._nmi_choices: list[str] = []
+
     async def async_step_init(self, user_input=None):
+        """Collect the API key and partner ID, then discover the account's NMI(s) - same as initial setup."""
         errors = {}
+        cur = self.config_entry.data
         if user_input is not None:
-            errors = await _async_validate_input(self.hass, user_input)
+            api_key = user_input.get("api_key")
+            partner_id = user_input.get("partner_id")
+            nmis, errors = await _async_discover_nmis_or_errors(self.hass, api_key, partner_id)
 
             if not errors:
-                new_nmi_id = user_input["nmi_id"]
-                nmi_changed = new_nmi_id != self.config_entry.data.get("nmi_id")
-
-                # Changing the NMI here would otherwise leave this entry's
-                # own unique_id pointing at the old NMI - silently breaking
-                # the duplicate-NMI check both ways: the old NMI would look
-                # falsely "already configured" if re-added, and the new NMI
-                # wouldn't look configured at all even though it now is.
-                if nmi_changed and any(
-                    entry.unique_id == new_nmi_id
-                    for entry in self.hass.config_entries.async_entries(DOMAIN)
-                    if entry.entry_id != self.config_entry.entry_id
-                ):
-                    errors["nmi_id"] = "already_configured"
-                else:
-                    # Credentials live in config_entry.data (that's what
-                    # async_setup_entry reads) - OptionsFlow.async_create_entry
-                    # only writes config_entry.options, which is never read, so
-                    # update .data directly and reload for the change to
-                    # actually take effect.
-                    update_kwargs = {"data": user_input}
-                    if nmi_changed:
-                        update_kwargs["unique_id"] = new_nmi_id
-                    self.hass.config_entries.async_update_entry(
-                        self.config_entry, **update_kwargs
-                    )
-                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                    return self.async_create_entry(title="", data={})
-
-        # Defaults reflect what's actually in use (config_entry.data)
-        cur = self.config_entry.data
+                self._api_key = api_key
+                self._partner_id = partner_id
+                self._nmi_choices = nmis
+                return await self.async_step_pick_nmi()
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("api_key", default=(user_input or {}).get("api_key", cur.get("api_key", ""))): str,
                 vol.Required("partner_id", default=(user_input or {}).get("partner_id", cur.get("partner_id", ""))): str,
-                vol.Required("nmi_id", default=(user_input or {}).get("nmi_id", cur.get("nmi_id", ""))): str,
             }),
+            errors=errors,
+        )
+
+    async def async_step_pick_nmi(self, user_input=None):
+        """Confirm or change which discovered NMI this entry manages."""
+        errors = {}
+        current_nmi = self.config_entry.data.get("nmi_id")
+
+        if user_input is not None:
+            new_nmi_id = user_input["nmi_id"]
+            nmi_changed = new_nmi_id != current_nmi
+
+            # Changing the NMI here would otherwise leave this entry's own
+            # unique_id pointing at the old NMI - silently breaking the
+            # duplicate-NMI check both ways: the old NMI would look falsely
+            # "already configured" if re-added, and the new NMI wouldn't
+            # look configured at all even though it now is.
+            if nmi_changed and any(
+                entry.unique_id == new_nmi_id
+                for entry in self.hass.config_entries.async_entries(DOMAIN)
+                if entry.entry_id != self.config_entry.entry_id
+            ):
+                errors["nmi_id"] = "already_configured"
+            else:
+                # Credentials live in config_entry.data (that's what
+                # async_setup_entry reads) - OptionsFlow.async_create_entry
+                # only writes config_entry.options, which is never read, so
+                # update .data directly and reload for the change to
+                # actually take effect.
+                update_kwargs = {
+                    "data": {
+                        "api_key": self._api_key,
+                        "partner_id": self._partner_id,
+                        "nmi_id": new_nmi_id,
+                    }
+                }
+                if nmi_changed:
+                    update_kwargs["unique_id"] = new_nmi_id
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, **update_kwargs
+                )
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                return self.async_create_entry(title="", data={})
+
+        # Pre-select the entry's current NMI if it's still in the
+        # discovered list; otherwise (e.g. different credentials that don't
+        # cover it) leave it unselected rather than defaulting to one that
+        # may not even be right.
+        if current_nmi in self._nmi_choices:
+            nmi_key = vol.Required("nmi_id", default=current_nmi)
+        else:
+            nmi_key = vol.Required("nmi_id")
+
+        return self.async_show_form(
+            step_id="pick_nmi",
+            data_schema=vol.Schema({nmi_key: vol.In(self._nmi_choices)}),
             errors=errors,
         )

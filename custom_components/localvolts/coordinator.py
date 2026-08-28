@@ -21,32 +21,29 @@ class LocalvoltsAuthError(Exception):
     """Raised when the API rejects the given API key or partner ID."""
 
 
-async def _async_request_interval_data(
-    hass: HomeAssistant, api_key: str, partner_id: str, nmi_id: str | None = None
-) -> Any:
-    """Make a single, minimal real request to the interval endpoint.
+async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str) -> list[str]:
+    """Find every NMI this API key/partner ID combination can see.
 
-    Shared by async_validate_credentials (checks one specific NMI) and
-    async_discover_nmis (passes NMI=* to see every NMI this partner/key can
-    access, per the API docs). Both only need a tiny time window, not the
-    coordinator's full 24h forecast, and are deliberately kept separate
-    from the coordinator's own fetch logic below - duplicating this much is
-    safer than reshaping the coordinator's already-tuned fetch path just to
-    share it.
+    Used by the config flow (both initial setup and options/reconfigure) so
+    the user can pick their NMI from a real, confirmed list instead of
+    hand-typing an 11-character code (the README already has a workaround
+    note about people mistyping the trailing checksum digit). GET
+    /customer/interval with NMI=* returns every NMI the partner/key can
+    see, per the API docs - this call also doubles as credential
+    validation, since a bad key/partner still raises LocalvoltsAuthError. A
+    minimal 5-minute window is used since the coordinator's full 24h
+    forecast isn't needed just to see which NMIs exist.
 
-    Raises LocalvoltsAuthError if the API rejects the key/partner.
+    Raises LocalvoltsAuthError if the API rejects the key/partner, or
+    ValueError if the credentials are accepted but no NMI is found.
     aiohttp.ClientError (network failures, bad HTTP status) propagates as-is.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     from_time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     to_time_str = (now + datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    # Always sent explicitly (never omitted) - the docs say an absent NMI
-    # defaults to '*', but only 'NMI=*' has actually been verified against
-    # the live API.
-    nmi_arg = nmi_id if nmi_id is not None else "*"
     url = (
         f"https://api.localvolts.com/v1/customer/interval?"
-        f"NMI={nmi_arg}&from={from_time_str}&to={to_time_str}"
+        f"NMI=*&from={from_time_str}&to={to_time_str}"
     )
     headers = {
         "Authorization": f"apikey {api_key}",
@@ -60,37 +57,11 @@ async def _async_request_interval_data(
             if response.status in (401, 403, 500):
                 raise LocalvoltsAuthError((await response.text()).strip())
             response.raise_for_status()
-            return await response.json()
+            data = await response.json()
     except aiohttp.ClientError as err:
         _LOGGER.error("Localvolts config flow request failed: %s", err)
         raise
 
-
-async def async_validate_credentials(hass: HomeAssistant, api_key: str, partner_id: str, nmi_id: str) -> None:
-    """Confirm these credentials work for this specific NMI.
-
-    Used by the options flow to catch bad credentials at reconfigure time
-    instead of only discovering them once the coordinator's next refresh
-    fails. Raises LocalvoltsAuthError (see above) or ValueError if the NMI
-    is accepted but returns no data.
-    """
-    data = await _async_request_interval_data(hass, api_key, partner_id, nmi_id)
-    if isinstance(data, list) and not data:
-        raise ValueError("No data received: Invalid NMI?")
-
-
-async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str) -> list[str]:
-    """Find every NMI this API key/partner ID combination can see.
-
-    Used by the initial config flow so the user can pick their NMI from a
-    real, confirmed list instead of hand-typing an 11-character code (the
-    README already has a workaround note about people mistyping the
-    trailing checksum digit). This call also doubles as credential
-    validation - a bad key/partner still raises LocalvoltsAuthError here.
-
-    Raises ValueError if the credentials are accepted but no NMI is found.
-    """
-    data = await _async_request_interval_data(hass, api_key, partner_id)
     nmis = sorted({item["NMI"] for item in data if "NMI" in item})
     if not nmis:
         raise ValueError("No NMIs found for this account")

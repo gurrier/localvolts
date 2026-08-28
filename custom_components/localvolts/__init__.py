@@ -144,15 +144,5 @@ def validate_partner_id(partner_id):
         _LOGGER.error("Invalid Partner ID. It should be numeric.")
         return False
 
-def validate_nmi_id(nmi_id):
-    """Validate the NMI."""
-    expected_length = 11  # Length of a valid NMI is 10 or 11 alphanumeric characters
-
-    # Check if the NMI id is of the expected length and contains only alphanumeric characters
-    if 10 <= len(nmi_id) <= expected_length and nmi_id.isalnum():
-        return True
-    else:
-        _LOGGER.error("Invalid NMI id format or length. NMI must be 10-11 alphanumeric characters.")
-        return False
 
 

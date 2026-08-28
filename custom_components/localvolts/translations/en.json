@@ -21,7 +21,6 @@
         "error": {
             "invalid_api_key": "Invalid API key",
             "invalid_partner_id": "Invalid partner ID",
-            "invalid_nmi_id": "Invalid NMI ID",
             "cannot_connect": "Could not connect to the Localvolts API. Check your internet connection and try again.",
             "no_nmi_found": "No NMI is available on this account. Check with Localvolts that your API key and partner ID are authorised to see one."
         },
@@ -33,10 +32,16 @@
         "step": {
             "init": {
                 "title": "Localvolts Options",
-                "description": "Options for the Localvolts integration.",
+                "description": "Enter the API key and partner ID Localvolts issued you. Your NMI(s) will be looked up automatically.",
                 "data": {
                     "api_key": "API Key",
-                    "partner_id": "Partner ID",
+                    "partner_id": "Partner ID"
+                }
+            },
+            "pick_nmi": {
+                "title": "Select NMI",
+                "description": "Confirm or change which NMI this entry manages.",
+                "data": {
                     "nmi_id": "NMI ID"
                 }
             }
@@ -44,8 +49,8 @@
         "error": {
             "invalid_api_key": "Invalid API key",
             "invalid_partner_id": "Invalid partner ID",
-            "invalid_nmi_id": "Invalid NMI ID",
             "cannot_connect": "Could not connect to the Localvolts API. Check your internet connection and try again.",
+            "no_nmi_found": "No NMI is available on this account. Check with Localvolts that your API key and partner ID are authorised to see one.",
             "already_configured": "This NMI is already configured under another entry"
         }
     },
