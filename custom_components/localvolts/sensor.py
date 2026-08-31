@@ -174,6 +174,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_name = "Forecasted Costs Flex Up"
+    _unrecorded_attributes = frozenset({"forecast"})
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
