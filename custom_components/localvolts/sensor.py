@@ -174,6 +174,11 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_name = "Forecasted Costs Flex Up"
+    # Keeps the recorder from persisting the ~287-entry forecast list (it
+    # regularly exceeds the 16KB per-attribute limit) while leaving the
+    # scalar state and its statistics recording normally - unlike excluding
+    # the whole entity, which would also block that.
+    _unrecorded_attributes = frozenset({"forecast"})
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
