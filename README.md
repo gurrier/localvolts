@@ -81,16 +81,9 @@ forecast:
   friendly_name: Forecasted Costs Flex Up
 ```
 
-**A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. Left as-is, you'll see repeated recorder warnings in your log about oversized attributes, and Home Assistant will keep trying (and failing) to write it into the history database on every update. Since it's a rolling forecast rather than something worth graphing over time anyway, there's nothing useful to keep in history for it - exclude it in `configuration.yaml`:
+**A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. As of v0.7.4, this is handled automatically: the integration tells the recorder to skip just that one oversized attribute, so you won't see the warnings and there's nothing to configure yourself. The sensor's price value still records and shows history/statistics normally - only the large rolling forecast list itself is excluded.
 
-```yaml
-recorder:
-  exclude:
-    entities:
-      - sensor.forecasted_costs_flex_up
-```
-
-The other sensors (`costsFlexUp`, `earningsFlexUp`, `dataLag`, `intervalEnd`) stay small even with the full set of fields now included, so there's no need to exclude those too.
+If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` in an earlier version, you can remove it - keeping it would now also block that price history from recording, which is no longer necessary.
 
 For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
 
@@ -206,4 +199,4 @@ Now you can create actions that orchestrate your smart appliances based on what 
 3. If you installed manually, delete the `custom_components/localvolts` folder from your Home Assistant config directory.
 4. Restart Home Assistant.
 
-If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` (see above), remove that too since the entity will no longer exist.
+If you have an old `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` from before v0.7.4, remove that too since the entity will no longer exist.
