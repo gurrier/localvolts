@@ -92,16 +92,15 @@ async def async_setup_entry(hass, config_entry):
     version = str(integration.version) if integration.version else "unknown"
 
     # Initialize coordinator
-    coordinator = LocalvoltsDataUpdateCoordinator(hass, api_key, partner_id, nmi_id, version)
+    coordinator = LocalvoltsDataUpdateCoordinator(
+        hass, config_entry, api_key, partner_id, nmi_id, version
+    )
 
-    try:
-        await coordinator.async_refresh()
-        if not coordinator.last_update_success:
-            _LOGGER.error("Initial data fetch failed")
-            return False
-    except Exception as err:
-        _LOGGER.error("Error initializing coordinator: %s", err)
-        return False
+    # Raises ConfigEntryNotReady if the first fetch fails, so Home Assistant
+    # retries setup with backoff on its own. Returning False here instead
+    # would leave the integration dead until the user restarts - a real
+    # problem when HA starts up before the network is ready.
+    await coordinator.async_config_entry_first_refresh()
 
     # Store on the entry itself rather than a hass.data[DOMAIN] dict keyed by
     # entry_id - besides being the current convention, it rules out the kind

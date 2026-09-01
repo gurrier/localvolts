@@ -68,23 +68,28 @@ class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.data_key = data_key
         self._attr_should_poll = False
-        self._last_value = None
 
 class LocalvoltsPriceSensor(LocalvoltsSensor):
     """LocalVolts Price Sensor"""
 
     @property
     def native_value(self):
-        """Return the state of the sensor (scaled monetary value)."""
+        """Return the state of the sensor (scaled monetary value).
+
+        Deliberately reports unknown rather than holding the last seen price
+        if the current record has no value for it - the coordinator already
+        retains the last good interval, so anything missing here means the
+        price genuinely isn't known, and a stale price is worse than none
+        for the automations these drive.
+        """
         # coordinator.data can be None before the first successful refresh
         # (see gurrier/localvolts#21 - this crashed with the same shape).
         coordinator_data = self.coordinator.data or {}
-        item = coordinator_data.get("exp", coordinator_data)
-        if item:
-            value = item.get(self.data_key)
-            if value is not None:
-                self._last_value = round(value / MONETARY_CONVERSION_FACTOR, 3)
-        return self._last_value
+        item = coordinator_data.get("exp", coordinator_data) or {}
+        value = item.get(self.data_key)
+        if value is None:
+            return None
+        return round(value / MONETARY_CONVERSION_FACTOR, 3)
 
     @property
     def extra_state_attributes(self):

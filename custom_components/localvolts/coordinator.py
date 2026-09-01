@@ -98,6 +98,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(
         self,
         hass,
+        config_entry,
         api_key: str,
         partner_id: str,
         nmi_id: str,
@@ -126,6 +127,9 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            # Passed explicitly rather than relying on the context-var
+            # fallback - async_config_entry_first_refresh() needs it set.
+            config_entry=config_entry,
             name="Localvolts Data",
             update_interval=SCAN_INTERVAL,
         )
@@ -245,8 +249,13 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             # Clear existing forecast data to prevent duplicates
             self.forecast_data.clear()
             for item in data:
-                quality = item.get("quality", "").lower()
                 try:
+                    # Read inside the try: a record that isn't a dict, or one
+                    # whose "quality" is JSON null rather than absent (the ""
+                    # default only covers a missing key), would otherwise
+                    # raise AttributeError out here and fail the whole poll
+                    # instead of skipping just the one bad record.
+                    quality = str(item.get("quality") or "").lower()
                     if quality == "exp":
                         interval_end = parser.isoparse(item["intervalEnd"])
                         last_update_time = parser.isoparse(item["lastUpdate"])
@@ -282,7 +291,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(
                             "Skipping non-'exp' and non-'fcst' quality data. Only 'exp' and 'fcst' are processed."
                         )
-                except (KeyError, ValueError, TypeError) as err:
+                except (AttributeError, KeyError, ValueError, TypeError) as err:
                     _LOGGER.warning(
                         "Skipping malformed interval record %s: %s", item, err)
                     continue
