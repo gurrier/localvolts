@@ -65,7 +65,10 @@ async def _async_discover_nmis_or_errors(hass: HomeAssistant, api_key: str, part
         return None, _map_auth_error(err)
     except ValueError:
         return None, {"base": "no_nmi_found"}
-    except aiohttp.ClientError:
+    except (TimeoutError, aiohttp.ClientError):
+        # TimeoutError is what a ClientTimeout total actually raises - it is
+        # not an aiohttp.ClientError, so it needs naming separately or the
+        # form would fall through to "unknown error".
         return None, {"base": "cannot_connect"}
 
     return nmis, {}

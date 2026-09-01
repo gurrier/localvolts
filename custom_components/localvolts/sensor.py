@@ -61,7 +61,22 @@ async def async_setup_entry(
     )
 
 
-class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
+class LocalvoltsEntity(CoordinatorEntity, SensorEntity):
+    """Shared availability handling for every Localvolts sensor."""
+
+    @property
+    def available(self) -> bool:
+        """Report unavailable rather than serve data known to be out of date.
+
+        CoordinatorEntity's own check covers hard failures through
+        last_update_success. This adds the soft case - the API answering
+        normally while no longer returning fresh intervals - where the
+        price would otherwise sit there looking current indefinitely.
+        """
+        return super().available and not self.coordinator.data_is_stale
+
+
+class LocalvoltsSensor(LocalvoltsEntity):
     """Representation of a generic Localvolts sensor."""
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator, data_key: str) -> None:
@@ -121,7 +136,7 @@ class LocalvoltsEarningsFlexUpSensor(LocalvoltsPriceSensor):
         self._attr_name = EARNINGS_FLEX_UP
         self._attr_unique_id = f"{coordinator.nmi_id}_{EARNINGS_FLEX_UP}"
 
-class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
+class LocalvoltsDataLagSensor(LocalvoltsEntity):
     """Sensor for monitoring the data lag time in seconds."""
 
     _attr_native_unit_of_measurement = "s"
@@ -143,7 +158,7 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
         """Return basic interval attributes for data lag."""
         return _interval_attrs(self.coordinator)
 
-class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
+class LocalvoltsIntervalEndSensor(LocalvoltsEntity):
     """Sensor for monitoring the end time of the latest interval."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -170,7 +185,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         data = data.get("exp", data) or {}
         return dict(data)
 
-class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
+class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
     """Sensor for monitoring forecasted costsFlexUp for the next 24 hours."""
 
     _attr_native_unit_of_measurement = "c/kWh"

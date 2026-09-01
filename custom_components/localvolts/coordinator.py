@@ -45,6 +45,23 @@ CATCHUP_POLL_INTERVAL = datetime.timedelta(seconds=1)
 MAX_CATCHUP_WAIT = datetime.timedelta(seconds=60)
 SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
 
+# Without an explicit timeout aiohttp waits around five minutes. A server
+# that accepts the connection and then hangs would stall polling for that
+# whole time - no retries, no catch-up, just frozen sensors. Failing fast
+# turns it into an ordinary UpdateFailed and the normal retry cycle.
+# NOTE: exceeding `total` raises TimeoutError, which is NOT an
+# aiohttp.ClientError, so both must be caught wherever these are used.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+DISCOVERY_TIMEOUT = aiohttp.ClientTimeout(total=15)
+
+# How far past the newest known interval end the data can drift before the
+# entities stop claiming to be current. last_update_success only catches
+# hard failures - the API can also fail soft, answering normally while
+# never returning a fresh settled interval. Three intervals is well clear
+# of the slowest publish delay ever observed (~76s), so ordinary operation
+# never trips it.
+STALE_AFTER = datetime.timedelta(minutes=15)
+
 
 class LocalvoltsAuthError(Exception):
     """Raised when the API rejects the given API key or partner ID."""
@@ -90,7 +107,8 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
 
     Raises LocalvoltsAuthError if the API rejects the key/partner, or
     ValueError if the credentials are accepted but no NMI is found.
-    aiohttp.ClientError (network failures, bad HTTP status) propagates as-is.
+    TimeoutError and aiohttp.ClientError (network failures, bad HTTP
+    status) propagate as-is.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     url, headers = _build_request(
@@ -104,12 +122,12 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
 
     try:
         session = async_get_clientsession(hass)
-        async with session.get(url, headers=headers) as response:
+        async with session.get(url, headers=headers, timeout=DISCOVERY_TIMEOUT) as response:
             if response.status in (401, 403, 500):
                 raise LocalvoltsAuthError((await response.text()).strip())
             response.raise_for_status()
             data = await response.json()
-    except aiohttp.ClientError as err:
+    except (TimeoutError, aiohttp.ClientError) as err:
         _LOGGER.error("Localvolts config flow request failed: %s", err)
         raise
 
@@ -161,6 +179,19 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=SCAN_INTERVAL,
         )
 
+    @property
+    def data_is_stale(self) -> bool:
+        """True when the newest interval we hold is too old to be trusted.
+
+        Both the exp record and the forecast come from the same response,
+        so if no fresh interval has arrived in STALE_AFTER then everything
+        we're holding is out of date - not just the current price.
+        """
+        if self.intervalEnd is None:
+            return True
+        age = datetime.datetime.now(datetime.timezone.utc) - self.intervalEnd
+        return age > STALE_AFTER
+
     def async_update_listeners(self) -> None:
         """Notify entities only when something actually changed.
 
@@ -169,9 +200,17 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         without this, every entity re-writes state and pushes its (now
         large, for the forecast sensor) attributes on every such retry. Key
         includes last_update_success so failures/recoveries are still
-        always reported immediately.
+        always reported immediately, and data_is_stale so that crossing
+        into (or back out of) staleness reaches the entities - a soft
+        failure changes neither of the other two, so without it the
+        entities would never re-render as unavailable.
         """
-        key = (self.intervalEnd, len(self.forecast_data), self.last_update_success)
+        key = (
+            self.intervalEnd,
+            len(self.forecast_data),
+            self.last_update_success,
+            self.data_is_stale,
+        )
         if key == self._last_notified_key:
             return
         self._last_notified_key = key
@@ -235,7 +274,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
             try:
                 session = async_get_clientsession(self.hass)
-                async with session.get(url, headers=headers) as response:
+                async with session.get(url, headers=headers, timeout=REQUEST_TIMEOUT) as response:
                     # The Localvolts API returns auth failures (missing/invalid
                     # API key or partner id) as HTTP 500 with the specific
                     # reason as plain text in the body, e.g. "Invalid API Key
@@ -262,6 +301,12 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         "No data received, check that your NMI, PartnerID and API Key are correct.")
                     raise UpdateFailed("No data received: Invalid NMI?")
 
+            except TimeoutError as e:
+                _LOGGER.error(
+                    "Timed out waiting for the Localvolts API after %ss",
+                    REQUEST_TIMEOUT.total)
+                raise UpdateFailed(
+                    f"Timed out after {REQUEST_TIMEOUT.total}s") from e
             except aiohttp.ClientError as e:
                 _LOGGER.error(
                     "Failed to fetch data from Localvolts API: %s", str(e))
