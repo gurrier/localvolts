@@ -1,4 +1,4 @@
-"""Platform for Localvolts sensor integration. August 2025"""
+"""Platform for Localvolts sensor integration."""
 
 from __future__ import annotations
 
@@ -67,7 +67,6 @@ class LocalvoltsSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator, data_key: str) -> None:
         super().__init__(coordinator)
         self.data_key = data_key
-        self._attr_should_poll = False
 
 class LocalvoltsPriceSensor(LocalvoltsSensor):
     """LocalVolts Price Sensor"""
@@ -132,7 +131,6 @@ class LocalvoltsDataLagSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "DataLag"
         self._attr_unique_id = f"{coordinator.nmi_id}_data_lag"
-        self._attr_should_poll = False
 
     @property
     def native_value(self):
@@ -154,8 +152,7 @@ class LocalvoltsIntervalEndSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "IntervalEnd"
         self._attr_unique_id = f"{coordinator.nmi_id}_interval_end"
-        self._attr_should_poll = False
-        
+
     @property
     def native_value(self):
         """Return the interval end as a datetime object."""
@@ -187,9 +184,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "Forecasted Costs Flex Up"
         self._attr_unique_id = f"{coordinator.nmi_id}_forecast_costs_flex_up"
-        self._attr_should_poll = False
 
     @property
     def native_value(self):
@@ -233,7 +228,7 @@ class LocalvoltsForecastCostsSensor(CoordinatorEntity, SensorEntity):
                     if "costsFlexUp" in entry:
                         entry["costsFlexUp"] = round(entry["costsFlexUp"], 5)
                     forecast.append(entry)
-                except Exception as err:
+                except (AttributeError, KeyError, ValueError, TypeError) as err:
                     _LOGGER.debug("Skipping unparsable forecast entry %s: %s", fcast, err)
                     continue
             attributes["forecast"] = forecast

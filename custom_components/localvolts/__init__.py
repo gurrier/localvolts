@@ -5,7 +5,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.loader import async_get_integration
 import logging
-import voluptuous as vol
 
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
@@ -16,18 +15,10 @@ from .const import (
     CONF_NMI_ID
 )
 
-CONFIG_SCHEMA = vol.Schema(
-    {
-        DOMAIN: vol.Schema(
-            {
-                vol.Required(CONF_API_KEY): cv.string,
-                vol.Required(CONF_PARTNER_ID): cv.string,
-                vol.Required(CONF_NMI_ID): cv.string,
-            }
-        )
-    },
-    extra=vol.ALLOW_EXTRA,
-)
+# Setup is via config entries only. The previous schema validated a YAML
+# block that async_setup then ignored - and would fail config validation
+# outright for anyone whose leftover block was missing a key.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,26 +113,6 @@ async def async_setup(hass: HomeAssistant, config: dict):
     _LOGGER.debug("Setting up the localvolts component.")
     # No action needed for YAML configuration, as we are using config entries now
     return True
-
-def validate_api_key(api_key):
-    """Validate the API key."""
-    expected_length = 32  # Length of a valid API key
-
-    # Check if the API key is of the expected length and a valid hexadecimal
-    if len(api_key) == expected_length and all(c in '0123456789abcdef' for c in api_key.lower()):
-        return True
-    else:
-        _LOGGER.error("Invalid API key format or length.")
-        return False
-
-def validate_partner_id(partner_id):
-    """Validate the Partner ID."""
-    # Check if the partner_id is a digit string
-    if partner_id.isdigit():
-        return True
-    else:
-        _LOGGER.error("Invalid Partner ID. It should be numeric.")
-        return False
 
 
 

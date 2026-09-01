@@ -19,6 +19,7 @@
             }
         },
         "error": {
+            "required": "This field is required",
             "invalid_api_key": "Invalid API key",
             "invalid_partner_id": "Invalid partner ID",
             "cannot_connect": "Could not connect to the Localvolts API. Check your internet connection and try again.",
@@ -47,6 +48,7 @@
             }
         },
         "error": {
+            "required": "This field is required",
             "invalid_api_key": "Invalid API key",
             "invalid_partner_id": "Invalid partner ID",
             "cannot_connect": "Could not connect to the Localvolts API. Check your internet connection and try again.",

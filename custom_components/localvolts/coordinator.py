@@ -1,72 +1,26 @@
 """Coordinator for Localvolts integration."""
 
+from __future__ import annotations
+
 import datetime
 import logging
+from typing import Any
+
+import aiohttp
 from dateutil import parser, tz
-from typing import Any, Dict
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class LocalvoltsAuthError(Exception):
-    """Raised when the API rejects the given API key or partner ID."""
-
-
-async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str) -> list[str]:
-    """Find every NMI this API key/partner ID combination can see.
-
-    Used by the config flow (both initial setup and options/reconfigure) so
-    the user can pick their NMI from a real, confirmed list instead of
-    hand-typing an 11-character code (the README already has a workaround
-    note about people mistyping the trailing checksum digit). GET
-    /customer/interval with NMI=* returns every NMI the partner/key can
-    see, per the API docs - this call also doubles as credential
-    validation, since a bad key/partner still raises LocalvoltsAuthError. A
-    minimal 5-minute window is used since the coordinator's full 24h
-    forecast isn't needed just to see which NMIs exist.
-
-    Raises LocalvoltsAuthError if the API rejects the key/partner, or
-    ValueError if the credentials are accepted but no NMI is found.
-    aiohttp.ClientError (network failures, bad HTTP status) propagates as-is.
-    """
-    now = datetime.datetime.now(datetime.timezone.utc)
-    from_time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    to_time_str = (now + datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    url = (
-        f"https://api.localvolts.com/v1/customer/interval?"
-        f"NMI=*&from={from_time_str}&to={to_time_str}"
-    )
-    headers = {
-        "Authorization": f"apikey {api_key}",
-        "partner": partner_id,
-        "User-Agent": "ha-localvolts/config-flow-validation (+https://github.com/gurrier/localvolts)",
-    }
-
-    try:
-        session = async_get_clientsession(hass)
-        async with session.get(url, headers=headers) as response:
-            if response.status in (401, 403, 500):
-                raise LocalvoltsAuthError((await response.text()).strip())
-            response.raise_for_status()
-            data = await response.json()
-    except aiohttp.ClientError as err:
-        _LOGGER.error("Localvolts config flow request failed: %s", err)
-        raise
-
-    nmis = sorted({item["NMI"] for item in data if "NMI" in item})
-    if not nmis:
-        raise ValueError("No NMIs found for this account")
-    return nmis
-
+API_BASE_URL = "https://api.localvolts.com/v1/customer/interval"
+API_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+USER_AGENT_TEMPLATE = "ha-localvolts/{version} (+https://github.com/gurrier/localvolts)"
 
 SCAN_INTERVAL = datetime.timedelta(seconds=10)  # Used only until the first successful fetch, before any interval boundary is known.
 
@@ -92,6 +46,79 @@ MAX_CATCHUP_WAIT = datetime.timedelta(seconds=60)
 SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
 
 
+class LocalvoltsAuthError(Exception):
+    """Raised when the API rejects the given API key or partner ID."""
+
+
+def _build_request(
+    nmi_id: str,
+    api_key: str,
+    partner_id: str,
+    user_agent: str,
+    from_time: datetime.datetime,
+    to_time: datetime.datetime,
+) -> tuple[str, dict[str, str]]:
+    """Build the URL and headers for a /customer/interval request.
+
+    Shared by the coordinator's own polling and the config flow's NMI
+    discovery, so the endpoint and auth headers are only spelled out once.
+    Pass "*" as nmi_id for every NMI the partner/key is authorised to see.
+    """
+    url = (
+        f"{API_BASE_URL}?NMI={nmi_id}"
+        f"&from={from_time.strftime(API_TIME_FORMAT)}"
+        f"&to={to_time.strftime(API_TIME_FORMAT)}"
+    )
+    headers = {
+        "Authorization": f"apikey {api_key}",
+        "partner": partner_id,
+        "User-Agent": user_agent,
+    }
+    return url, headers
+
+
+async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str) -> list[str]:
+    """Find every NMI this API key/partner ID combination can see.
+
+    Used by the config flow (both initial setup and options/reconfigure) so
+    the user can pick their NMI from a real, confirmed list instead of
+    hand-typing an 11-character code. GET /customer/interval with NMI=*
+    returns every NMI the partner/key can see, per the API docs - this call
+    also doubles as credential validation, since a bad key/partner still
+    raises LocalvoltsAuthError. A minimal 5-minute window is used since the
+    coordinator's full 24h forecast isn't needed just to see which NMIs exist.
+
+    Raises LocalvoltsAuthError if the API rejects the key/partner, or
+    ValueError if the credentials are accepted but no NMI is found.
+    aiohttp.ClientError (network failures, bad HTTP status) propagates as-is.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    url, headers = _build_request(
+        "*",
+        api_key,
+        partner_id,
+        USER_AGENT_TEMPLATE.format(version="config-flow-validation"),
+        now,
+        now + datetime.timedelta(minutes=5),
+    )
+
+    try:
+        session = async_get_clientsession(hass)
+        async with session.get(url, headers=headers) as response:
+            if response.status in (401, 403, 500):
+                raise LocalvoltsAuthError((await response.text()).strip())
+            response.raise_for_status()
+            data = await response.json()
+    except aiohttp.ClientError as err:
+        _LOGGER.error("Localvolts config flow request failed: %s", err)
+        raise
+
+    nmis = sorted({item["NMI"] for item in data if "NMI" in item})
+    if not nmis:
+        raise ValueError("No NMIs found for this account")
+    return nmis
+
+
 class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     """DataUpdateCoordinator to manage fetching data from Localvolts API."""
 
@@ -109,7 +136,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.api_key: str = api_key
         self.partner_id: str = partner_id
         self.nmi_id: str = nmi_id
-        self.user_agent: str = f"ha-localvolts/{version} (+https://github.com/gurrier/localvolts)"
+        self.user_agent: str = USER_AGENT_TEMPLATE.format(version=version)
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
         self.time_past_start: datetime.timedelta = datetime.timedelta(0)
@@ -120,8 +147,8 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         # self-collide: the wrapped dict from the last poll would get wrapped
         # again on the next one, nesting deeper every poll where no fresh
         # interval data arrives.
-        self.interval_data: Dict[str, Any] = {}
-        self.forecast_data: List[Dict[str, Any]] = []
+        self.interval_data: dict[str, Any] = {}
+        self.forecast_data: list[dict[str, Any]] = []
         self._last_notified_key: Any = None
 
         super().__init__(
@@ -169,7 +196,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             return SLOW_RETRY_INTERVAL
         return CATCHUP_POLL_INTERVAL
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the API endpoint."""
         try:
             return await self._fetch_update_data()
@@ -178,7 +205,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                 datetime.datetime.now(datetime.timezone.utc)
             )
 
-    async def _fetch_update_data(self) -> Dict[str, Any]:
+    async def _fetch_update_data(self) -> dict[str, Any]:
         current_utc_time: datetime.datetime = datetime.datetime.now(
             datetime.timezone.utc)
         # No known boundary yet means this fetch is a startup catch-up for
@@ -197,19 +224,14 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         # Determine if we need to fetch new data
         if (self.intervalEnd is None) or (current_utc_time > self.intervalEnd):
             _LOGGER.debug("New interval detected. Retrieving the latest data.")
-            from_time_str: str = from_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            to_time_str: str = to_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-            url: str = (
-                f"https://api.localvolts.com/v1/customer/interval?"
-                f"NMI={self.nmi_id}&from={from_time_str}&to={to_time_str}"
+            url, headers = _build_request(
+                self.nmi_id,
+                self.api_key,
+                self.partner_id,
+                self.user_agent,
+                from_time,
+                to_time,
             )
-
-            headers: Dict[str, str] = {
-                "Authorization": f"apikey {self.api_key}",
-                "partner": self.partner_id,
-                "User-Agent": self.user_agent,
-            }
 
             try:
                 session = async_get_clientsession(self.hass)
@@ -223,7 +245,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     # sent.
                     if response.status in (401, 403, 500):
                         error_text = (await response.text()).strip()
-                        _LOGGER.critical(
+                        _LOGGER.error(
                             "Localvolts API authentication error (HTTP %s): %s",
                             response.status, error_text,
                         )

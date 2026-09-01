@@ -1,3 +1,5 @@
+"""Config and options flows for the Localvolts integration."""
+
 import logging
 import voluptuous as vol
 
@@ -6,11 +8,24 @@ import aiohttp
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN
-from . import validate_api_key, validate_partner_id
+from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID
 from .coordinator import LocalvoltsAuthError, async_discover_nmis
 
 _LOGGER = logging.getLogger(__name__)
+
+API_KEY_LENGTH = 32
+
+
+def _validate_api_key(api_key: str) -> bool:
+    """Check the API key looks like the 32-character hex string Localvolts issues."""
+    return len(api_key) == API_KEY_LENGTH and all(
+        c in "0123456789abcdef" for c in api_key.lower()
+    )
+
+
+def _validate_partner_id(partner_id: str) -> bool:
+    """Check the partner ID is numeric, as issued by Localvolts."""
+    return partner_id.isdigit()
 
 
 def _map_auth_error(err: LocalvoltsAuthError) -> dict:
@@ -18,9 +33,9 @@ def _map_auth_error(err: LocalvoltsAuthError) -> dict:
     tell an invalid key apart from an unregistered partner."""
     message = str(err).lower()
     if "api key" in message:
-        return {"api_key": "invalid_api_key"}
+        return {CONF_API_KEY: "invalid_api_key"}
     if "partner" in message:
-        return {"partner_id": "invalid_partner_id"}
+        return {CONF_PARTNER_ID: "invalid_partner_id"}
     return {"base": "cannot_connect"}
 
 
@@ -33,13 +48,13 @@ async def _async_discover_nmis_or_errors(hass: HomeAssistant, api_key: str, part
     """
     errors: dict = {}
     if not api_key:
-        errors["api_key"] = "required"
-    elif not validate_api_key(api_key):
-        errors["api_key"] = "invalid_api_key"
+        errors[CONF_API_KEY] = "required"
+    elif not _validate_api_key(api_key):
+        errors[CONF_API_KEY] = "invalid_api_key"
     if not partner_id:
-        errors["partner_id"] = "required"
-    elif not validate_partner_id(partner_id):
-        errors["partner_id"] = "invalid_partner_id"
+        errors[CONF_PARTNER_ID] = "required"
+    elif not _validate_partner_id(partner_id):
+        errors[CONF_PARTNER_ID] = "invalid_partner_id"
 
     if errors:
         return None, errors
@@ -69,17 +84,15 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Collect the API key and partner ID, then discover the account's NMI(s).
 
         The NMI itself is no longer typed in here - GET /customer/interval
-        with no NMI argument returns every NMI this partner/key can see
-        (confirmed against the real API - see the API guide's note that an
-        absent NMI defaults to '*'), which also doubles as validating the
-        credentials. One NMI found skips straight to creating the entry;
-        more than one goes to a picker instead of asking for a hand-typed,
-        easy-to-mistype 11-character code.
+        with NMI=* returns every NMI this partner/key can see, which also
+        doubles as validating the credentials. One NMI found skips straight
+        to creating the entry; more than one goes to a picker, instead of
+        asking for a hand-typed, easy-to-mistype 11-character code.
         """
         errors = {}
         if user_input is not None:
-            api_key = user_input.get("api_key")
-            partner_id = user_input.get("partner_id")
+            api_key = user_input.get(CONF_API_KEY)
+            partner_id = user_input.get(CONF_PARTNER_ID)
             nmis, errors = await _async_discover_nmis_or_errors(self.hass, api_key, partner_id)
 
             if not errors:
@@ -93,8 +106,8 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("api_key", default=(user_input or {}).get("api_key", "")): str,
-                vol.Required("partner_id", default=(user_input or {}).get("partner_id", "")): str,
+                vol.Required(CONF_API_KEY, default=(user_input or {}).get(CONF_API_KEY, "")): str,
+                vol.Required(CONF_PARTNER_ID, default=(user_input or {}).get(CONF_PARTNER_ID, "")): str,
             }),
             errors=errors,
         )
@@ -102,12 +115,12 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_pick_nmi(self, user_input=None):
         """Let the user pick which discovered NMI to set up, when there's more than one."""
         if user_input is not None:
-            return await self._async_create_entry_for_nmi(user_input["nmi_id"])
+            return await self._async_create_entry_for_nmi(user_input[CONF_NMI_ID])
 
         return self.async_show_form(
             step_id="pick_nmi",
             data_schema=vol.Schema({
-                vol.Required("nmi_id"): vol.In(self._nmi_choices),
+                vol.Required(CONF_NMI_ID): vol.In(self._nmi_choices),
             }),
         )
 
@@ -120,9 +133,9 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # "LocalVolts".
             title=f"LocalVolts ({nmi_id})",
             data={
-                "api_key": self._api_key,
-                "partner_id": self._partner_id,
-                "nmi_id": nmi_id,
+                CONF_API_KEY: self._api_key,
+                CONF_PARTNER_ID: self._partner_id,
+                CONF_NMI_ID: nmi_id,
             },
         )
 
@@ -130,6 +143,7 @@ class LocalvoltsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         return LocalvoltsOptionsFlowHandler()
+
 
 class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     # No __init__/self.config_entry assignment here - manually setting it is
@@ -147,8 +161,8 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
         cur = self.config_entry.data
         if user_input is not None:
-            api_key = user_input.get("api_key")
-            partner_id = user_input.get("partner_id")
+            api_key = user_input.get(CONF_API_KEY)
+            partner_id = user_input.get(CONF_PARTNER_ID)
             nmis, errors = await _async_discover_nmis_or_errors(self.hass, api_key, partner_id)
 
             if not errors:
@@ -160,8 +174,8 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required("api_key", default=(user_input or {}).get("api_key", cur.get("api_key", ""))): str,
-                vol.Required("partner_id", default=(user_input or {}).get("partner_id", cur.get("partner_id", ""))): str,
+                vol.Required(CONF_API_KEY, default=(user_input or {}).get(CONF_API_KEY, cur.get(CONF_API_KEY, ""))): str,
+                vol.Required(CONF_PARTNER_ID, default=(user_input or {}).get(CONF_PARTNER_ID, cur.get(CONF_PARTNER_ID, ""))): str,
             }),
             errors=errors,
         )
@@ -169,10 +183,10 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_pick_nmi(self, user_input=None):
         """Confirm or change which discovered NMI this entry manages."""
         errors = {}
-        current_nmi = self.config_entry.data.get("nmi_id")
+        current_nmi = self.config_entry.data.get(CONF_NMI_ID)
 
         if user_input is not None:
-            new_nmi_id = user_input["nmi_id"]
+            new_nmi_id = user_input[CONF_NMI_ID]
             nmi_changed = new_nmi_id != current_nmi
 
             # Changing the NMI here would otherwise leave this entry's own
@@ -185,7 +199,7 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 for entry in self.hass.config_entries.async_entries(DOMAIN)
                 if entry.entry_id != self.config_entry.entry_id
             ):
-                errors["nmi_id"] = "already_configured"
+                errors[CONF_NMI_ID] = "already_configured"
             else:
                 # Credentials live in config_entry.data (that's what
                 # async_setup_entry reads) - OptionsFlow.async_create_entry
@@ -194,9 +208,9 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 # actually take effect.
                 update_kwargs = {
                     "data": {
-                        "api_key": self._api_key,
-                        "partner_id": self._partner_id,
-                        "nmi_id": new_nmi_id,
+                        CONF_API_KEY: self._api_key,
+                        CONF_PARTNER_ID: self._partner_id,
+                        CONF_NMI_ID: new_nmi_id,
                     }
                 }
                 if nmi_changed:
@@ -212,9 +226,9 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
         # cover it) leave it unselected rather than defaulting to one that
         # may not even be right.
         if current_nmi in self._nmi_choices:
-            nmi_key = vol.Required("nmi_id", default=current_nmi)
+            nmi_key = vol.Required(CONF_NMI_ID, default=current_nmi)
         else:
-            nmi_key = vol.Required("nmi_id")
+            nmi_key = vol.Required(CONF_NMI_ID)
 
         return self.async_show_form(
             step_id="pick_nmi",
