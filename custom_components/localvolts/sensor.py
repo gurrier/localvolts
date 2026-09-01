@@ -101,9 +101,19 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
         coordinator_data = self.coordinator.data or {}
         item = coordinator_data.get("exp", coordinator_data) or {}
         value = item.get(self.data_key)
-        if value is None:
+        try:
+            # The API is inconsistent about numeric types - the sibling
+            # *VarRate fields arrive as strings and are documented as "N/A"
+            # when there is nothing to price. float() takes a numeric string
+            # but rejects "N/A", which is exactly the split wanted here;
+            # without it a non-numeric value would raise straight out of
+            # this property on every update.
+            return round(float(value) / MONETARY_CONVERSION_FACTOR, 3)
+        except (TypeError, ValueError):
+            if value is not None:
+                _LOGGER.debug(
+                    "Ignoring non-numeric %s value %r", self.data_key, value)
             return None
-        return round(value / MONETARY_CONVERSION_FACTOR, 3)
 
     @property
     def extra_state_attributes(self):
@@ -216,9 +226,13 @@ class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
             return None
 
         value = next_forecast.get("costsFlexUp")
-        if value is not None:
-            return round(value, 3)
-        return None
+        try:
+            # Same non-numeric guard as the price sensors above.
+            return round(float(value), 3)
+        except (TypeError, ValueError):
+            if value is not None:
+                _LOGGER.debug("Ignoring non-numeric forecast costsFlexUp %r", value)
+            return None
 
     @property
     def extra_state_attributes(self):
