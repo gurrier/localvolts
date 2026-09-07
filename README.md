@@ -202,6 +202,8 @@ template:
 
 ## Charting settled prices alongside the forecast
 
+![The settled price and the forecast either side of a "now" marker](assets/apexcharts-example.png)
+
 With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (available in HACS) you can plot the settled price you actually paid alongside the forecast on a single chart - the last 24 hours to the left of a "now" marker, the next 24 hours to the right.
 
 ```yaml
