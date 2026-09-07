@@ -167,9 +167,10 @@ apex_config:
   yaxis:
     decimalsInFloat: 2
 series:
-  # The settled price. costsFlexUp is published in $/kWh, so scale it up to
-  # share the forecast's c/kWh axis.
-  - entity: sensor.costsflexup
+  # Settled price, taken as the raw unrounded attribute so it keeps full
+  # precision. Already in c/kWh, so no transform is needed.
+  - entity: sensor.intervalend
+    attribute: costsFlexUp
     name: Actual
     type: line
     curve: stepline
@@ -178,7 +179,6 @@ series:
     stroke_width: 2
     extend_to: now
     float_precision: 3
-    transform: "return x * 100;"
   - entity: sensor.forecasted_costs_flex_up
     name: Forecast
     type: line
@@ -200,8 +200,9 @@ series:
 Two things worth knowing about how this works:
 
 - The `|| []` in the `data_generator` matters. If the sensor is unavailable - during a restart, before the first fetch, or if the integration has flagged the data as out of date - Home Assistant drops its attributes, and `entity.attributes.forecast` is then undefined. Without the fallback the card throws an error and renders nothing instead of just showing an empty forecast line.
-- The excluded `forecast` attribute (see the recorder note above) doesn't affect this. The forecast line is built from the sensor's *live* state, not from history, so it draws normally, and the "Actual" line reads `sensor.costsflexup`, which is recorded as usual.
-- `sensor.costsflexup` is stored rounded to three decimal places in `$/kWh`, so the charted line lands on 0.1 c/kWh steps. That's invisible at typical prices, but if you want full precision instead, `sensor.intervalend` carries the raw unrounded `costsFlexUp` as an attribute already in `c/kWh` - swap the first series for `entity: sensor.intervalend` with `attribute: costsFlexUp` and drop the `transform`.
+- The excluded `forecast` attribute (see the recorder note above) doesn't affect this. That exclusion applies only to the forecast sensor's own oversized list; `sensor.intervalend`'s attributes are recorded normally, and the forecast line is built from the sensor's *live* state rather than from history.
+- The "Actual" series uses `sensor.intervalend`'s `costsFlexUp` attribute rather than `sensor.costsflexup` because the attribute is the raw API value in `c/kWh`, matching the forecast's units exactly. `sensor.costsflexup` would work too, but it is published in `$/kWh` rounded to three decimals, so it needs `transform: "return x * 100;"` and lands on 0.1 c/kWh steps. Either is fine visually - the difference is under 0.05 c/kWh.
+- Attribute history only exists from the point those attributes started being recorded, so on a fresh install the "Actual" line may not reach a full 24 hours back at first. It fills in as history accumulates.
 
 **Optional: feeding forecasts into EMHASS.** If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
 
