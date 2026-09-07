@@ -125,6 +125,80 @@ template:
             {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
 ```
 
+**Optional: charting recent prices alongside the forecast.** With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (available in HACS) you can plot the sensor's recorded history and its forecast on a single chart - the last 24 hours to the left of a "now" marker, the next 24 hours to the right. Both series come from `sensor.forecasted_costs_flex_up`, so they share the same `c/kWh` scale.
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Flex Up Cost — actual & forecast
+  show_states: true
+  colorize_states: true
+graph_span: 48h
+span:
+  start: hour
+  offset: -24h
+now:
+  show: true
+  label: Now
+  color: red
+update_interval: 5min
+apex_config:
+  chart:
+    zoom:
+      enabled: true
+      type: x
+      autoScaleYaxis: true
+    toolbar:
+      show: true
+      autoSelected: pan
+      tools:
+        zoom: true
+        zoomin: true
+        zoomout: true
+        pan: true
+        reset: true
+  stroke:
+    dashArray:
+      - 0
+      - 6
+  legend:
+    show: true
+  yaxis:
+    decimalsInFloat: 2
+series:
+  - entity: sensor.forecasted_costs_flex_up
+    name: Actual
+    type: line
+    curve: stepline
+    unit: c/kWh
+    color: '#03a9f4'
+    stroke_width: 2
+    extend_to: now
+    float_precision: 3
+  - entity: sensor.forecasted_costs_flex_up
+    name: Forecast
+    type: line
+    curve: stepline
+    unit: c/kWh
+    color: '#ff9800'
+    stroke_width: 2
+    extend_to: false
+    float_precision: 3
+    show:
+      in_header: false
+      extremas: true
+    data_generator: |
+      return (entity.attributes.forecast || []).map((f) => {
+        return [new Date(f.start_time).getTime(), Number(f.costsFlexUp)];
+      });
+```
+
+Two things worth knowing about how this works:
+
+- The `|| []` in the `data_generator` matters. If the sensor is unavailable - during a restart, before the first fetch, or if the integration has flagged the data as out of date - Home Assistant drops its attributes, and `entity.attributes.forecast` is then undefined. Without the fallback the card throws an error and renders nothing instead of just showing an empty forecast line.
+- The excluded `forecast` attribute (see the recorder note above) doesn't affect this. The forecast line is built from the sensor's *live* state, not from history, so it draws normally; and the "Actual" line comes from the sensor's recorded state value, which is still recorded.
+
 **Optional: feeding forecasts into EMHASS.** If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
 
 ```yaml
@@ -148,8 +222,13 @@ template:
             {{ ns.price }}
 ```
 
-To use this integration in Home Assistant, it is necessary to join Localvolts as a customer https://localvolts.com/register/
-and request an API key using this form https://localvolts.com/localvolts-api/
+# Getting your API key
+
+To use this integration you need to be a Localvolts customer - you can join at https://localvolts.com/register/
+
+Once you have an account, your API key is available directly on the Localvolts website under **My Profile → API Key**. That is the quickest way to get it. If it isn't showing there, you can still request one using the form at https://localvolts.com/localvolts-api/
+
+You'll also need your **Partner ID**, issued alongside the API key. You no longer need to look up your NMI yourself - the integration asks Localvolts which NMIs your credentials cover and offers them during setup.
 
 # Installing the Localvolts Integration
 
