@@ -1,6 +1,6 @@
 {
     "config": {
-        "title": "Add NMI",
+        "title": "Localvolts",
         "step": {
             "user": {
                 "title": "Localvolts",
@@ -56,10 +56,5 @@
             "already_configured": "This NMI is already configured under another entry"
         }
     },
-    "title": "Localvolts",
-    "device_automation": {
-        "action_type": {
-            "toggle": "Toggle NMI"
-        }
-    }
+    "title": "Localvolts"
 }
