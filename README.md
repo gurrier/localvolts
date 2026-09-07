@@ -1,23 +1,90 @@
 # Localvolts
-An integration for Home Assistant for customers of Localvolts electricity retailer in Australia
 
-☕ If this integration's useful to you, [buy me a coffee](https://ko-fi.com/gurrier).
+An integration for Home Assistant for customers of Localvolts electricity retailer in Australia.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
 
-The integration currently exposes five sensors...
+It exposes what a kilowatt-hour actually costs you right now, what you'd earn exporting one, and a 24-hour forecast of both - updated every 5 minutes. That lets your automations decide when to run appliances, charge or discharge a battery, or export to the grid.
 
-1) costsFlexUp is the marginal IMPORT cost of electricity for you, in $/kWh (including loss factors and network fees) - how much extra your bill increases for each additional kWh you import between now and the end of the current 5-minute interval.
+☕ If this integration's useful to you, [buy me a coffee](https://ko-fi.com/gurrier).
+
+---
+
+# Before you start
+
+You need to be a Localvolts customer - you can join at https://localvolts.com/register/
+
+Once you have an account, both of the things you need are on the Localvolts website under **My Profile → API Key**:
+
+- **API key**
+- **Partner ID**
+
+If the API key isn't showing there, you can request one using the form at https://localvolts.com/localvolts-api/
+
+You don't need to look up your NMI. The integration asks Localvolts which NMIs are registered to your account and offers them to you during setup.
+
+# Installing
+
+The quickest way: click the badge below to open HACS on your own Home Assistant instance with this repository ready to install.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
+
+Or find it in HACS yourself:
+
+1. Open HACS, go to the "Integrations" section.
+2. Search for "Localvolts".
+3. Click it, then "Download".
+
+If you'd rather add it as a custom repository instead (for example, to track a specific branch), that still works too:
+
+1. Click on the 3 dots in the top right corner.
+2. Select "Custom repositories"
+3. Add the URL to the repository. https://github.com/gurrier/localvolts
+4. Select the integration category.
+5. Click the "ADD" button.
+
+Restart Home Assistant once it's downloaded.
+
+# Setting it up
+
+Go to **Settings → Devices & Services → Add Integration** and search for Localvolts. You'll be asked for just two things:
+
+```
+  api_key: "abc123abc123abc123abc123abc123ab"
+  partner_id: "12345"
+```
+
+That's all you enter. The integration then asks Localvolts which NMIs are registered to your account: if there's only one it's selected for you automatically, and if you have several sites you choose the one you want from a list. To set up an additional site, add the integration again and pick a different NMI.
+
+To change any of this later, use the cog icon on the integration. It asks for the same two credentials and then lets you confirm or change the NMI, with your current one pre-selected.
+
+# Checking it worked
+
+Look for these entities:
+
+- `sensor.costsflexup`
+- `sensor.earningsflexup`
+- `sensor.datalag`
+- `sensor.intervalend`
+- `sensor.forecasted_costs_flex_up`
+
+If they're populated with numbers, you're set. Now you can create automations that orchestrate your appliances based on what electricity will cost you, or what you'll earn exporting it.
+
+---
+
+# The sensors
+
+1) **costsFlexUp** is the marginal IMPORT cost of electricity for you, in $/kWh (including loss factors and network fees) - how much extra your bill increases for each additional kWh you import between now and the end of the current 5-minute interval.
 
 Because it's a rate, you need to convert any change in your power draw (kW) into the energy (kWh) it represents before it means anything in dollars. For example, drawing an extra 1kW for the rest of a freshly-started interval is 1kW × 1/12 hour = 0.083 kWh - multiply that by costsFlexUp to get the actual extra cost of that decision.
 
-2) earningsFlexUp is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
+2) **earningsFlexUp** is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
-3) datalag which is the duration within the current 5 min interval before new data was discovered with the Localvolts API.  This is usually (hopefully) within 30 seconds and can be as low as 15 seconds.
+3) **datalag** is how far into the current 5-minute interval Localvolts published the data, in seconds. It's typically 15-35 seconds; the fastest observed is 11 seconds.
 
-4) intervalEnd contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
+4) **intervalEnd** contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
 
-5) forecasted_costs_flex_up state reflects the costsFlexUp of the next upcoming 5-minute interval, in c/kWh. The `forecast` attribute is a list covering the next 24 hours, one entry per 5-minute interval, and each entry includes every field the Localvolts API returns for that interval - not just earningsFlexUp/costsFlexUp, but demand, import/export, emissions and quality data too. `forecastcount` gives the total number of entries in the list. One entry, shown in full, looks like this:
+5) **forecasted_costs_flex_up** state reflects the costsFlexUp of the next upcoming 5-minute interval, in c/kWh. The `forecast` attribute is a list covering the next 24 hours, one entry per 5-minute interval, and each entry includes every field the Localvolts API returns for that interval - not just earningsFlexUp/costsFlexUp, but demand, import/export, emissions and quality data too. `forecastcount` gives the total number of entries in the list. One entry, shown in full, looks like this:
 
 ```
 forecast:
@@ -77,7 +144,7 @@ forecast:
 
   forecastcount: 287
   unit_of_measurement: c/kWh
-  device_class: monetary
+  state_class: measurement
   friendly_name: Forecasted Costs Flex Up
 ```
 
@@ -85,7 +152,13 @@ forecast:
 
 If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` in an earlier version, you can remove it - keeping it would now also block that price history from recording, which is no longer necessary.
 
-For example, use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
+---
+
+# Examples
+
+## Knowing when a demand tariff applies
+
+Use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
 
 ```
 template:
@@ -96,6 +169,8 @@ template:
           {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
         icon: mdi:clock
 ```
+
+## Highest cost and earnings in the next 24 hours
 
 The forecast list is also handy for looking ahead rather than just at the current interval - for example, working out the highest import cost and export earning you might see over the next 24 hours, and when:
 
@@ -125,7 +200,9 @@ template:
             {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
 ```
 
-**Optional: charting settled prices alongside the forecast.** With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (available in HACS) you can plot the settled price you actually paid alongside the forecast on a single chart - the last 24 hours to the left of a "now" marker, the next 24 hours to the right.
+## Charting settled prices alongside the forecast
+
+With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (available in HACS) you can plot the settled price you actually paid alongside the forecast on a single chart - the last 24 hours to the left of a "now" marker, the next 24 hours to the right.
 
 ```yaml
 type: custom:apexcharts-card
@@ -197,14 +274,16 @@ series:
       });
 ```
 
-Two things worth knowing about how this works:
+A few things worth knowing about how this works:
 
 - The `|| []` in the `data_generator` matters. If the sensor is unavailable - during a restart, before the first fetch, or if the integration has flagged the data as out of date - Home Assistant drops its attributes, and `entity.attributes.forecast` is then undefined. Without the fallback the card throws an error and renders nothing instead of just showing an empty forecast line.
 - The excluded `forecast` attribute (see the recorder note above) doesn't affect this. That exclusion applies only to the forecast sensor's own oversized list; `sensor.intervalend`'s attributes are recorded normally, and the forecast line is built from the sensor's *live* state rather than from history.
 - The "Actual" series uses `sensor.intervalend`'s `costsFlexUp` attribute rather than `sensor.costsflexup` because the attribute is the raw API value in `c/kWh`, matching the forecast's units exactly. `sensor.costsflexup` would work too, but it is published in `$/kWh` rounded to three decimals, so it needs `transform: "return x * 100;"` and lands on 0.1 c/kWh steps. Either is fine visually - the difference is under 0.05 c/kWh.
 - Attribute history only exists from the point those attributes started being recorded, so on a fresh install the "Actual" line may not reach a full 24 hours back at first. It fills in as history accumulates.
 
-**Optional: feeding forecasts into EMHASS.** If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
+## Feeding forecasts into EMHASS
+
+If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
 
 ```yaml
 template:
@@ -227,60 +306,12 @@ template:
             {{ ns.price }}
 ```
 
-# Getting your API key
+---
 
-To use this integration you need to be a Localvolts customer - you can join at https://localvolts.com/register/
-
-Once you have an account, your API key is available directly on the Localvolts website under **My Profile → API Key**. That is the quickest way to get it. If it isn't showing there, you can still request one using the form at https://localvolts.com/localvolts-api/
-
-You'll also need your **Partner ID**, issued alongside the API key. You no longer need to look up your NMI yourself - the integration asks Localvolts which NMIs your credentials cover and offers them during setup.
-
-# Installing the Localvolts Integration
-
-The quickest way: click the badge below to open HACS on your own Home Assistant instance with this repository ready to install.
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
-
-Or install manually through HACS:
-
-1. Open HACS, go to the "Integrations" section.
-2. Search for "Localvolts".
-3. Click it, then "Download".
-
-If you'd rather add it as a custom repository instead (for example, to track a specific branch), that still works too:
-
-1. Click on the 3 dots in the top right corner.
-2. Select "Custom repositories"
-3. Add the URL to the repository. https://github.com/gurrier/localvolts
-4. Select the integration category.
-5. Click the "ADD" button.
-
-Either way, once added you can browse for and install Localvolts in Home Assistant using HACS
-
-# A setup dialog will appear to allow you to configure the three settings below (no longer necessary to edit configuration.yaml).
-
-```
-  api_key: "abc123abc123abc123abc123abc123ab"
-  partner_id: "12345"
-  nmi_id: "1234567890" #Ignore trailing checksum digit on Localvolts bill and dashboard
-```
-
-# Alternatively, use the manual method to get the integration installed in Home Assistant
-
-In Home Assistant, copy the files in this repository into a subfolder of your existing Home Assistant's custom_components folder.
-
-# Restart Home Assistant
-In either case, you will need to restart Home Assistant to get the integration working.
-Look for the sensors (sensor.costsFlexUp and sensor.earningsFlexUp) in Home Assistant to verify it worked.
-
-
-Now you can create actions that orchestrate your smart appliances based on what electricity cost you will incur or price you will earn with Localvolts
-
-# Removing the Localvolts Integration
+# Removing the integration
 
 1. Go to Settings → Devices & Services → Localvolts, click the three dots, and select "Delete". This removes the config entry and its sensors.
-2. If you installed via HACS, go to HACS → Integrations → Localvolts, click the three dots, and select "Remove" to delete the integration's files too.
-3. If you installed manually, delete the `custom_components/localvolts` folder from your Home Assistant config directory.
-4. Restart Home Assistant.
+2. In HACS, go to Integrations → Localvolts, click the three dots, and select "Remove" to delete the integration's files too.
+3. Restart Home Assistant.
 
-If you have an old `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` from before v0.7.4, remove that too since the entity will no longer exist.
+If you have an old `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` from before v0.7.4, remove that too since the entity will no longer exist. If you installed by copying files in manually at some point in the past, delete the `custom_components/localvolts` folder from your Home Assistant config directory.
