@@ -221,7 +221,6 @@ now:
   show: true
   label: Now
   color: red
-update_interval: 5min
 apex_config:
   chart:
     zoom:
@@ -258,6 +257,9 @@ series:
     stroke_width: 2
     extend_to: now
     float_precision: 3
+    show:
+      # Already shown in the header - the legend would just repeat it.
+      legend_value: false
   - entity: sensor.forecasted_costs_flex_up
     name: Forecast
     type: line
@@ -268,7 +270,10 @@ series:
     extend_to: false
     float_precision: 3
     show:
-      in_header: false
+      # Header shows the forecast for the next interval. The legend can
+      # only show the last point, ~24h out, so it's hidden there.
+      in_header: after_now
+      legend_value: false
       extremas: true
     data_generator: |
       return (entity.attributes.forecast || []).map((f) => {
@@ -278,6 +283,8 @@ series:
 
 A few things worth knowing about how this works:
 
+- The header shows two prices: **Actual** is the current settled price, and **Forecast** is the forecast for the next interval (`in_header: after_now`). The legend below the chart only names the series. The card always takes the legend value from the last point of a series, which for the forecast is the price about 24 hours out, so both legend values are hidden with `legend_value: false`.
+- Don't add `update_interval` to the card. Without it the card redraws whenever a new interval arrives. With it, the card redraws on its own timer instead, so the header can keep showing the previous interval's price for several minutes after `sensor.costsflexup` has moved on.
 - The `|| []` in the `data_generator` matters. If the sensor is unavailable - during a restart, before the first fetch, or if the integration has flagged the data as out of date - Home Assistant drops its attributes, and `entity.attributes.forecast` is then undefined. Without the fallback the card throws an error and renders nothing instead of just showing an empty forecast line.
 - The excluded `forecast` attribute (see the recorder note above) doesn't affect this. That exclusion applies only to the forecast sensor's own oversized list; `sensor.intervalend`'s attributes are recorded normally, and the forecast line is built from the sensor's *live* state rather than from history.
 - The "Actual" series uses `sensor.intervalend`'s `costsFlexUp` attribute rather than `sensor.costsflexup` because the attribute is the raw API value in `c/kWh`, matching the forecast's units exactly. `sensor.costsflexup` would work too, but it is published in `$/kWh` rounded to three decimals, so it needs `transform: "return x * 100;"` and lands on 0.1 c/kWh steps. Either is fine visually - the difference is under 0.05 c/kWh.
