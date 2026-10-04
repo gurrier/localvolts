@@ -37,23 +37,6 @@ POST_BOUNDARY_DEAD_WINDOW = datetime.timedelta(seconds=11)
 # independently of it), so tightening this should pull the effective delay
 # the user sees down further, not just how fast we detect a fixed event.
 CATCHUP_POLL_INTERVAL = datetime.timedelta(seconds=1)
-# If fresh data still hasn't arrived this long after a boundary, treat it as
-# a sign the backend is struggling rather than just running a bit slow -
-# retrying every second won't help that, so back off to a gentler cadence.
-# The slowest interval seen in a real sample was ~76s; 60s gives a margin
-# over the normal range without hammering for as long as the old 120s did.
-MAX_CATCHUP_WAIT = datetime.timedelta(seconds=60)
-SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
-
-# Without an explicit timeout aiohttp waits around five minutes. A server
-# that accepts the connection and then hangs would stall polling for that
-# whole time - no retries, no catch-up, just frozen sensors. Failing fast
-# turns it into an ordinary UpdateFailed and the normal retry cycle.
-# NOTE: exceeding `total` raises TimeoutError, which is NOT an
-# aiohttp.ClientError, so both must be caught wherever these are used.
-REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
-DISCOVERY_TIMEOUT = aiohttp.ClientTimeout(total=15)
-
 # How far past the end of the interval we hold the data can drift before the
 # entities stop claiming to be current. The record is the expected price for
 # the interval *in progress*, so its intervalEnd is in the future when it
@@ -68,6 +51,29 @@ DISCOVERY_TIMEOUT = aiohttp.ClientTimeout(total=15)
 # a price survive three whole intervals, and NEM prices can move violently
 # in that time - a stale price here costs real money.
 STALE_AFTER = datetime.timedelta(seconds=90)
+
+# Catch up tightly for exactly as long as the data still counts as current,
+# then accept that the backend is struggling and back off to a gentler
+# cadence; retrying every second won't fix that.
+#
+# Tied to STALE_AFTER rather than set independently, because past this point
+# lag can only be *observed* in SLOW_RETRY_INTERVAL steps. With the two at
+# 60s and 90s the 30s grid pushed real lags of 61-89s onto readings of
+# exactly 90, manufacturing the very threshold crossings it was being
+# measured against - 5 samples in 14 days sat in that band, reported as
+# 65, 65, 89, 90, 90. Keeping them equal costs ~30 extra 1s polls on the
+# ~1.2 occasions a day that get past 60s, and makes the number honest.
+MAX_CATCHUP_WAIT = STALE_AFTER
+SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
+
+# Without an explicit timeout aiohttp waits around five minutes. A server
+# that accepts the connection and then hangs would stall polling for that
+# whole time - no retries, no catch-up, just frozen sensors. Failing fast
+# turns it into an ordinary UpdateFailed and the normal retry cycle.
+# NOTE: exceeding `total` raises TimeoutError, which is NOT an
+# aiohttp.ClientError, so both must be caught wherever these are used.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+DISCOVERY_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 # Staleness and "something is wrong" are different thresholds. At 90s the
 # former fires for ordinary lateness roughly daily, which would bury the real
