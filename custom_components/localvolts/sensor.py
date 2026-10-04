@@ -68,12 +68,16 @@ class LocalvoltsEntity(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Report unavailable rather than serve data known to be out of date.
 
-        CoordinatorEntity's own check covers hard failures through
-        last_update_success. This adds the soft case - the API answering
-        normally while no longer returning fresh intervals - where the
-        price would otherwise sit there looking current indefinitely.
+        Deliberately not CoordinatorEntity's own test, which fails on
+        last_update_success and so blanks every entity on a single failed
+        poll - a two-second DNS hiccup did exactly that on 5 October, while
+        the price being held was seconds old and still correct for the
+        interval in progress. What matters for a price is the age of the
+        data, not whether the most recent of many polls per interval
+        happened to fail, and data_is_stale covers the never-had-data case
+        too, since intervalEnd is None until the first record arrives.
         """
-        return super().available and not self.coordinator.data_is_stale
+        return not self.coordinator.data_is_stale
 
 
 class LocalvoltsSensor(LocalvoltsEntity):

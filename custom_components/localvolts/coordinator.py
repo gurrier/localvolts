@@ -54,13 +54,46 @@ SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 DISCOVERY_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
-# How far past the newest known interval end the data can drift before the
-# entities stop claiming to be current. last_update_success only catches
-# hard failures - the API can also fail soft, answering normally while
-# never returning a fresh settled interval. Three intervals is well clear
-# of the slowest publish delay ever observed (~76s), so ordinary operation
-# never trips it.
-STALE_AFTER = datetime.timedelta(minutes=15)
+# How far past the end of the interval we hold the data can drift before the
+# entities stop claiming to be current. The record is the expected price for
+# the interval *in progress*, so its intervalEnd is in the future when it
+# arrives and this age is simply how late the next interval's price is -
+# which is exactly what the dataLag sensor measures. Over 3873 samples
+# (15 days): p50 18s, p95 29s, p99 39s, with ~0.8 samples/day above 90s,
+# mostly a cluster between 05:19 and 06:24 local that looks like something
+# scheduled at Localvolts' end.
+#
+# So 90s costs about one brief unavailability a day and never serves a price
+# from an interval that ended more than 90s ago. The previous 15 minutes let
+# a price survive three whole intervals, and NEM prices can move violently
+# in that time - a stale price here costs real money.
+STALE_AFTER = datetime.timedelta(seconds=90)
+
+# Staleness and "something is wrong" are different thresholds. At 90s the
+# former fires for ordinary lateness roughly daily, which would bury the real
+# events, so an outage is only announced once no fresh interval has arrived
+# for this long. Against the same 15 days of dataLag this would not have
+# produced a single false alarm, while catching all three of the 37-61 minute
+# soft outages seen on 4 October.
+OUTAGE_WARN_AFTER = datetime.timedelta(minutes=5)
+
+# Retrying every second against an endpoint that is throwing errors achieves
+# nothing - during a brief DNS failure it just turns one dead minute into
+# sixty dead requests. Consecutive hard failures (exceptions, not polls that
+# succeed with no new interval) back off 5s, 10s, 20s, then hold at 30s, which
+# is the cadence the schedule already falls back to in a long outage, so the
+# worst case never gets slower than it was. Any successful poll resets this
+# and the normal boundary-anchored schedule resumes immediately.
+FAILURE_BACKOFF_BASE = datetime.timedelta(seconds=5)
+FAILURE_BACKOFF_MAX = datetime.timedelta(seconds=30)
+
+
+def _format_duration(delta: datetime.timedelta) -> str:
+    """Render a gap as e.g. 41m30s, for log lines people read."""
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{seconds // 60}m{seconds % 60:02d}s"
 
 
 class LocalvoltsAuthError(Exception):
@@ -168,6 +201,18 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.interval_data: dict[str, Any] = {}
         self.forecast_data: list[dict[str, Any]] = []
         self._last_notified_key: Any = None
+        # Hard failures in a row; drives the backoff in _next_update_interval.
+        self._consecutive_failures: int = 0
+        # Set while an outage has been announced, so it is announced once and
+        # the recovery can report how long the whole gap was.
+        self._outage_announced_end: Any = None
+        # What the last response actually contained, so a staleness warning can
+        # say whether Localvolts stopped publishing settled intervals or we
+        # stopped recognising them.
+        self._last_response_at: Any = None
+        self._last_record_count: int = 0
+        self._last_quality_counts: dict[str, int] = {}
+        self._last_settled_end: Any = None
 
         super().__init__(
             hass,
@@ -191,6 +236,78 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             return True
         age = datetime.datetime.now(datetime.timezone.utc) - self.intervalEnd
         return age > STALE_AFTER
+
+    def _log_fetch_failure(self, message: str, *args: Any) -> None:
+        """Log the first failure of an outage at error, the rest at debug.
+
+        last_update_success is still True while our own handler runs - the
+        coordinator clears it only after catching what we raise - so this
+        marks exactly the transition into failure, the same point at which
+        Home Assistant logs its own line. Everything after that would just
+        repeat the same message every poll for as long as the outage lasts.
+        """
+        if self.last_update_success:
+            _LOGGER.error(message, *args)
+        else:
+            _LOGGER.debug(message, *args)
+
+    def _describe_last_response(self) -> str:
+        """Summarise the last response, for an outage warning.
+
+        The point is to separate "Localvolts stopped publishing settled
+        intervals" from "we stopped recognising them": the first shows a
+        recent response full of forecast records with exp=0, the second
+        would show exp records arriving that we didn't act on.
+        """
+        if self._last_response_at is None:
+            return "no successful response yet"
+        age = datetime.datetime.now(datetime.timezone.utc) - self._last_response_at
+        qualities = ", ".join(
+            f"{quality}={count}"
+            for quality, count in sorted(self._last_quality_counts.items())
+        ) or "none"
+        settled = (
+            self._last_settled_end.isoformat()
+            if self._last_settled_end is not None
+            else "none"
+        )
+        return (
+            f"last response {_format_duration(age)} ago: "
+            f"{self._last_record_count} records ({qualities}), "
+            f"newest settled intervalEnd {settled}"
+        )
+
+    def _announce_outage_state(self) -> None:
+        """Say once when the data stops arriving, and once when it resumes.
+
+        Without this an outage is completely silent: the entities go
+        unavailable and nothing is written to the log, which is exactly what
+        happened through three separate 37-61 minute gaps on 4 October.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if self.data_is_stale:
+            if self.intervalEnd is None:
+                return  # Nothing has ever arrived; setup retry covers this.
+            age = now - self.intervalEnd
+            if age > OUTAGE_WARN_AFTER and self._outage_announced_end is None:
+                self._outage_announced_end = self.intervalEnd
+                _LOGGER.warning(
+                    "No fresh interval data for %s (newest intervalEnd %s); %s",
+                    _format_duration(age),
+                    self.intervalEnd.isoformat(),
+                    self._describe_last_response(),
+                )
+            return
+        if self._outage_announced_end is not None:
+            # Warning rather than info on purpose: Home Assistant logs its own
+            # recovery line at info, which the default log level hides, so an
+            # outage that was announced would otherwise appear never to end.
+            _LOGGER.warning(
+                "Interval data resumed after %s; now at intervalEnd %s",
+                _format_duration(now - self._outage_announced_end),
+                self.intervalEnd.isoformat() if self.intervalEnd else "unknown",
+            )
+            self._outage_announced_end = None
 
     def async_update_listeners(self) -> None:
         """Notify entities only when something actually changed.
@@ -225,7 +342,15 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         taking unusually long. Runs from a `finally` block so it's based on
         the actual current state of self.intervalEnd/now regardless of
         whether this attempt succeeded, found no new data, or raised.
+
+        Hard failures take precedence over all of that: there is no point
+        pacing against interval boundaries while every request is erroring.
         """
+        if self._consecutive_failures:
+            # Capped exponent as well as capped result: without it a long
+            # outage would eventually shift 2**n past anything useful.
+            steps = min(self._consecutive_failures - 1, 8)
+            return min(FAILURE_BACKOFF_BASE * 2 ** steps, FAILURE_BACKOFF_MAX)
         if self.intervalEnd is None:
             return SCAN_INTERVAL
         time_to_boundary = self.intervalEnd - now
@@ -238,8 +363,17 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the API endpoint."""
         try:
-            return await self._fetch_update_data()
+            result = await self._fetch_update_data()
+        except Exception:
+            self._consecutive_failures += 1
+            raise
+        else:
+            self._consecutive_failures = 0
+            return result
         finally:
+            # After the except/else above, so the backoff sees this attempt's
+            # outcome rather than the previous one's.
+            self._announce_outage_state()
             self.update_interval = self._next_update_interval(
                 datetime.datetime.now(datetime.timezone.utc)
             )
@@ -284,7 +418,7 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     # sent.
                     if response.status in (401, 403, 500):
                         error_text = (await response.text()).strip()
-                        _LOGGER.error(
+                        self._log_fetch_failure(
                             "Localvolts API authentication error (HTTP %s): %s",
                             response.status, error_text,
                         )
@@ -297,22 +431,31 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # If the API returns an empty list, log a warning
                 if isinstance(data, list) and not data:
-                    _LOGGER.warning(
+                    self._log_fetch_failure(
                         "No data received, check that your NMI, PartnerID and API Key are correct.")
                     raise UpdateFailed("No data received: Invalid NMI?")
 
             except TimeoutError as e:
-                _LOGGER.error(
+                self._log_fetch_failure(
                     "Timed out waiting for the Localvolts API after %ss",
                     REQUEST_TIMEOUT.total)
                 raise UpdateFailed(
                     f"Timed out after {REQUEST_TIMEOUT.total}s") from e
             except aiohttp.ClientError as e:
-                _LOGGER.error(
+                self._log_fetch_failure(
                     "Failed to fetch data from Localvolts API: %s", str(e))
                 raise UpdateFailed(f"Error communicating with API: {e}") from e
 
             # Process data
+            self._last_response_at = datetime.datetime.now(datetime.timezone.utc)
+            self._last_record_count = len(data) if isinstance(data, list) else 0
+            quality_counts: dict[str, int] = {}
+            # The settled record to apply, chosen across the whole response
+            # rather than by taking whichever happens to come last: nothing in
+            # the API guide promises an order. Carries its already-parsed
+            # timestamps so that applying it can't raise.
+            best: tuple[dict[str, Any], datetime.datetime, datetime.datetime] | None = None
+
             # Clear existing forecast data to prevent duplicates
             self.forecast_data.clear()
             for item in data:
@@ -323,6 +466,9 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     # raise AttributeError out here and fail the whole poll
                     # instead of skipping just the one bad record.
                     quality = str(item.get("quality") or "").lower()
+                    quality_counts[quality or "(missing)"] = (
+                        quality_counts.get(quality or "(missing)", 0) + 1
+                    )
                     if quality == "exp":
                         interval_end = parser.isoparse(item["intervalEnd"])
                         last_update_time = parser.isoparse(item["lastUpdate"])
@@ -334,21 +480,8 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                             last_update_time = last_update_time.replace(
                                 tzinfo=tz.UTC)
 
-                        # Update variables
-                        self.intervalEnd = interval_end
-                        self.lastUpdate = last_update_time
-                        self.interval_data = item
-
-                        duration = int(item.get("intervalDuration", 5))
-                        interval_start: datetime.datetime = interval_end - \
-                            datetime.timedelta(minutes=duration)
-                        if not is_startup:
-                            self.time_past_start = last_update_time - interval_start
-                        _LOGGER.debug(
-                            "Data updated: intervalEnd=%s, lastUpdate=%s",
-                            self.intervalEnd,
-                            self.lastUpdate,
-                        )
+                        if best is None or interval_end > best[1]:
+                            best = (item, interval_end, last_update_time)
                     elif quality == "fcst":
                         # Store forecast data
                         self.forecast_data.append(item)
@@ -362,6 +495,37 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning(
                         "Skipping malformed interval record %s: %s", item, err)
                     continue
+
+            self._last_quality_counts = quality_counts
+            self._last_settled_end = best[1] if best else None
+
+            # `>=`, not `>`: an Exp record is an *expected* price and the same
+            # interval can legitimately be republished with a refined one.
+            # Strictly older is refused, so a stray record can never drag
+            # intervalEnd backwards and make the data look staler than it is.
+            if best is not None and (
+                self.intervalEnd is None or best[1] >= self.intervalEnd
+            ):
+                settled_item, interval_end, last_update_time = best
+                self.intervalEnd = interval_end
+                self.lastUpdate = last_update_time
+                self.interval_data = settled_item
+
+                # Applied outside the per-record try that used to guard it,
+                # so it has to tolerate rubbish on its own.
+                try:
+                    duration = int(settled_item.get("intervalDuration", 5))
+                except (TypeError, ValueError):
+                    duration = 5
+                interval_start: datetime.datetime = interval_end - \
+                    datetime.timedelta(minutes=duration)
+                if not is_startup:
+                    self.time_past_start = last_update_time - interval_start
+                _LOGGER.debug(
+                    "Data updated: intervalEnd=%s, lastUpdate=%s",
+                    self.intervalEnd,
+                    self.lastUpdate,
+                )
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 
