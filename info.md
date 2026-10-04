@@ -70,6 +70,8 @@ Look for these entities:
 
 If they're populated with numbers, you're set. Now you can create automations that orchestrate your appliances based on what electricity will cost you, or what you'll earn exporting it.
 
+If a sensor shows `unavailable` for a short while, that's normal rather than a sign of a broken setup - see [When the sensors go unavailable](#when-the-sensors-go-unavailable) below.
+
 ---
 
 # The sensors
@@ -80,7 +82,7 @@ Because it's a rate, you need to convert any change in your power draw (kW) into
 
 2) **earningsFlexUp** is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
 
-3) **datalag** is how far into the current 5-minute interval Localvolts published the data, in seconds. It's typically 15-35 seconds; the fastest observed is 11 seconds.
+3) **datalag** is how far into the current 5-minute interval Localvolts published the data, in seconds. Across 3,873 intervals it was 18 seconds at the median, under 30 seconds for 96% of intervals, and under 39 seconds for 99%; the fastest seen is 10 seconds. Roughly 0.8 intervals a day run past 90 seconds, most of those in a cluster between 05:19 and 06:24 local time.
 
 4) **intervalEnd** contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
 
@@ -151,6 +153,23 @@ forecast:
 **A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. As of v0.7.4, this is handled automatically: the integration tells the recorder to skip just that one oversized attribute, so you won't see the warnings and there's nothing to configure yourself. The sensor's price value still records and shows history/statistics normally - only the large rolling forecast list itself is excluded.
 
 If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` in an earlier version, you can remove it - keeping it would now also block that price history from recording, which is no longer necessary.
+
+# When the sensors go unavailable
+
+A Localvolts price belongs to one 5-minute interval, and the next interval's price can be very different - the NEM moves fast enough that acting on an expired price costs real money. So rather than keep showing a price after the interval it belongs to has ended, the sensors report `unavailable` once no fresh interval has arrived for 90 seconds.
+
+Expect that briefly about once a day, most often early in the morning, when Localvolts publishes late. The sensors come back as soon as the data does, usually within seconds. Before v0.8.0 the integration held a price for 15 minutes - three whole intervals - before giving up on it.
+
+If it lasts longer than five minutes, the integration writes a warning to the log saying how long it has been and what the API is actually returning:
+
+```
+No fresh interval data for 18m12s (newest intervalEnd 2026-10-04T23:05:00+00:00);
+last response 12s ago: 288 records (fcst=288), newest settled intervalEnd none
+```
+
+That line distinguishes the two ways this can fail. `fcst=288, exp=0` with a recent response means Localvolts is answering normally but has stopped publishing settled intervals - nothing is wrong at your end, and it has been observed lasting the better part of an hour. A much older "last response" means requests aren't getting through at all, which is usually your own network or DNS. A second warning is logged when the data resumes, with the length of the gap.
+
+**For your automations:** treat `unavailable` as "don't act", not as zero. In a template, guard with `has_value('sensor.costsflexup')` or default the conversion, for example `states('sensor.costsflexup') | float(default=0)` - and make sure a default of 0 can't be read as "electricity is free right now".
 
 ---
 
