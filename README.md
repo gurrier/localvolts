@@ -169,7 +169,7 @@ last response 12s ago: 288 records (fcst=288), newest settled intervalEnd none
 
 That line distinguishes the two ways this can fail. `fcst=288, exp=0` with a recent response means Localvolts is answering normally but has stopped publishing settled intervals - nothing is wrong at your end, and it has been observed lasting the better part of an hour. A much older "last response" means requests aren't getting through at all, which is usually your own network or DNS. A second warning is logged when the data resumes, with the length of the gap.
 
-**For your automations:** treat `unavailable` as "don't act", not as zero. In a template, guard with `has_value('sensor.costsflexup')` or default the conversion, for example `states('sensor.costsflexup') | float(default=0)` - and make sure a default of 0 can't be read as "electricity is free right now".
+**For your automations:** treat `unavailable` as "don't act", not as zero. There's a worked pair of notification automations under [Knowing when prices stop arriving](#knowing-when-prices-stop-arriving). In a template, guard with `has_value('sensor.costsflexup')` or default the conversion, for example `states('sensor.costsflexup') | float(default=0)` - and make sure a default of 0 can't be read as "electricity is free right now".
 
 ---
 
@@ -188,6 +188,68 @@ template:
           {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
         icon: mdi:clock
 ```
+
+## Knowing when prices stop arriving
+
+The sensors going unavailable is itself the signal that no fresh interval has arrived, so a pair of automations can tell you about an outage while it's happening rather than the next morning. Replace `notify.mobile_app_your_phone` with your own notify service.
+
+```yaml
+automation:
+  - alias: NOTIFY Localvolts prices stalled
+    description: costsflexup has been unavailable for 5 minutes, meaning no settled interval has arrived
+    triggers:
+      - trigger: state
+        entity_id: sensor.costsflexup
+        to: unavailable
+        for: "00:05:00"
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            Localvolts prices stalled: no settled interval since
+            {{ (as_timestamp(trigger.to_state.last_changed) - 90) | timestamp_custom('%H:%M', true) }},
+            about {{ ((as_timestamp(now()) - as_timestamp(trigger.to_state.last_changed) + 90) / 60) | round | int }}
+            minutes ago. The integration logs the detail as a warning.
+    mode: single
+
+  - alias: NOTIFY Localvolts prices recovered
+    description: costsflexup is available again after an outage long enough to have alerted
+    triggers:
+      - trigger: state
+        entity_id: sensor.costsflexup
+        from: unavailable
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.state not in ['unknown', 'unavailable']
+             and (as_timestamp(trigger.to_state.last_changed)
+                  - as_timestamp(trigger.from_state.last_changed)) >= 300 }}
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {% set out = as_timestamp(trigger.to_state.last_changed) - as_timestamp(trigger.from_state.last_changed) %}
+            {%- set gap = out + 90 %}
+            Localvolts prices are back at {{ trigger.to_state.state }} $/kWh.
+            Unavailable for {{ (out / 60) | round(1) }} minutes; no settled interval for
+            {{ (gap / 60) | round(1) }} minutes, since
+            {{ (as_timestamp(trigger.from_state.last_changed) - 90) | timestamp_custom('%H:%M', true) }}.
+    mode: single
+```
+
+The five-minute windows matter. Localvolts is routinely a little late - about once a day it takes more than 90 seconds, so the sensors blink unavailable briefly - and neither automation fires for those. The first only triggers after five continuous minutes, and the second only reports a recovery from an outage that lasted at least that long, so routine lateness stays off your phone.
+
+The recovery message gives both numbers because they differ: the time the sensors were unavailable, and the total time without a settled interval, which is 90 seconds longer. On a real outage on 6 October 2026 they read:
+
+```
+Localvolts prices stalled: no settled interval since 05:30, about 6 minutes ago.
+The integration logs the detail as a warning.
+
+Localvolts prices are back at 0.375 $/kWh. Unavailable for 30.5 minutes;
+no settled interval for 32.0 minutes, since 05:30.
+```
+
+One caveat: the recovery automation triggers on any change out of `unavailable`, which includes Home Assistant itself restarting. If yours is ever down for more than five minutes you'll get a recovery notification when it comes back, with the downtime as the duration.
 
 ## Highest cost and earnings in the next 24 hours
 
