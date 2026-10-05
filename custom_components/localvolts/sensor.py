@@ -165,7 +165,7 @@ class LocalvoltsDataLagSensor(LocalvoltsEntity):
     def native_value(self):
         """Return the duration since the interval started, in seconds."""
         time_past_start = self.coordinator.time_past_start
-        return time_past_start.total_seconds() if time_past_start else None
+        return time_past_start.total_seconds() if time_past_start is not None else None
 
     @property
     def extra_state_attributes(self):

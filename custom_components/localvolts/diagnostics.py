@@ -55,7 +55,11 @@ async def async_get_config_entry_diagnostics(
                 (now - interval_end).total_seconds() if interval_end else None
             ),
             # Localvolts' own publish delay, not ours.
-            "data_lag_seconds": coordinator.time_past_start.total_seconds(),
+            "data_lag_seconds": (
+                coordinator.time_past_start.total_seconds()
+                if coordinator.time_past_start is not None
+                else None
+            ),
             "forecast_count": len(coordinator.forecast_data),
         },
         "current_interval": async_redact_data(

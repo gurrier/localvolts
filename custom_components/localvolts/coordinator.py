@@ -196,7 +196,9 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self.user_agent: str = USER_AGENT_TEMPLATE.format(version=version)
         self.intervalEnd: Any = None
         self.lastUpdate: Any = None
-        self.time_past_start: datetime.timedelta = datetime.timedelta(0)
+        # None until a lag has actually been measured. A real zero-second lag is a
+        # legitimate reading, so it can't share a sentinel with "not known yet".
+        self.time_past_start: datetime.timedelta | None = None
         # NOTE: deliberately not named `self.data` - the DataUpdateCoordinator
         # base class overwrites `self.data` with whatever _async_update_data()
         # returns after every poll. Since we return {"exp": ..., "fcst": ...},
