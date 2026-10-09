@@ -169,7 +169,7 @@ last response 12s ago: 288 records (fcst=288), newest settled intervalEnd none
 
 That line distinguishes the two ways this can fail. `fcst=288, exp=0` with a recent response means Localvolts is answering normally but has stopped publishing settled intervals - nothing is wrong at your end, and it has been observed lasting the better part of an hour. A much older "last response" means requests aren't getting through at all, which is usually your own network or DNS. A second warning is logged when the data resumes, with the length of the gap.
 
-**For your automations:** treat `unavailable` as "don't act", not as zero. There's a worked pair of notification automations under [Knowing when prices stop arriving](#knowing-when-prices-stop-arriving). In a template, guard with `has_value('sensor.costsflexup')` or default the conversion, for example `states('sensor.costsflexup') | float(default=0)` - and make sure a default of 0 can't be read as "electricity is free right now".
+**For your automations:** treat `unavailable` as "don't act", not as a number. There's a worked pair of notification automations under [Knowing when prices stop arriving](#knowing-when-prices-stop-arriving). Gate on availability rather than substituting a value: put a `{{ has_value('sensor.costsflexup') }}` condition on the automation, or an `availability:` template on any template sensor built from it, so it holds off until a real price arrives. Don't default the price to 0 - that reads as free electricity, which is the worst possible assumption to make when the real price is unknown.
 
 ---
 
