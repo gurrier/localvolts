@@ -23,3 +23,15 @@ jobs:
     steps:
       - uses: "actions/checkout@v7"
       - uses: "home-assistant/actions/hassfest@master"
+
+  test:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v7"
+      - uses: "actions/setup-python@v7"
+        with:
+          python-version: "3.13"
+      # Home Assistant itself is stubbed out in the tests; these are the two
+      # packages the integration actually depends on.
+      - run: pip install aiohttp python-dateutil
+      - run: python tests/test_coordinator.py
