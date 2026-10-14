@@ -1,6 +1,6 @@
 {
+    "title": "Localvolts",
     "config": {
-        "title": "Localvolts",
         "step": {
             "user": {
                 "title": "Localvolts",
@@ -55,6 +55,5 @@
             "no_nmi_found": "No NMI is available on this account. Check with Localvolts that your API key and partner ID are authorised to see one.",
             "already_configured": "This NMI is already configured under another entry"
         }
-    },
-    "title": "Localvolts"
+    }
 }
