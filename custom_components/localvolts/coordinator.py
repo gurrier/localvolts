@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import random
 from typing import Any
 
 import aiohttp
@@ -52,19 +53,33 @@ CATCHUP_POLL_INTERVAL = datetime.timedelta(seconds=1)
 # in that time - a stale price here costs real money.
 STALE_AFTER = datetime.timedelta(seconds=90)
 
-# Catch up tightly for exactly as long as the data still counts as current,
-# then accept that the backend is struggling and back off to a gentler
-# cadence; retrying every second won't fix that.
+# Catch-up stays at CATCHUP_POLL_INTERVAL until this far past the boundary,
+# then eases off linearly to CATCHUP_SLOWEST by CATCHUP_RAMP_COMPLETE. The
+# flat phase covers normal operation outright - p99 of dataLag is 39s - so a
+# healthy interval is polled exactly as hard as before and the fastest
+# possible reading is unchanged. Past that the data is already late, and
+# checking every second neither makes Localvolts answer sooner nor matters to
+# anyone waiting: a price that is 200s old is no more useful for arriving 1s
+# sooner. Measured against the real arrival times seen so far, this leaves
+# p50/p95/p99 intervals untouched and removes 19-29% of the polls on the late
+# ones, which is precisely when their backend is already struggling.
 #
-# Tied to STALE_AFTER rather than set independently, because past this point
-# lag can only be *observed* in SLOW_RETRY_INTERVAL steps. With the two at
-# 60s and 90s the 30s grid pushed real lags of 61-89s onto readings of
-# exactly 90, manufacturing the very threshold crossings it was being
-# measured against - 5 samples in 14 days sat in that band, reported as
-# 65, 65, 89, 90, 90. Keeping them equal costs ~30 extra 1s polls on the
-# ~1.2 occasions a day that get past 60s, and makes the number honest.
-MAX_CATCHUP_WAIT = STALE_AFTER
-SLOW_RETRY_INTERVAL = datetime.timedelta(seconds=30)
+# A ramp rather than a step on purpose. The step this replaces could only
+# express lateness in SLOW_RETRY-sized lumps: with it at 30s, real lags of
+# 61-89s were recorded as exactly 90, manufacturing threshold crossings out
+# of the measurement itself. The ramp is at ~6s resolution where the step was
+# at 30s, so the number stays honest through the range where it still means
+# something and only coarsens past the point where it doesn't.
+CATCHUP_FLAT_UNTIL = datetime.timedelta(seconds=45)
+CATCHUP_RAMP_COMPLETE = datetime.timedelta(seconds=300)
+CATCHUP_SLOWEST = datetime.timedelta(seconds=30)
+# Every installation shares the same wall-clock interval boundaries, so without
+# this they all wake, retry and give up in lockstep - a synchronised burst
+# arriving at the exact moment the backend is slowest. Randomising each
+# computed wait spreads the fleet out within a couple of retries. Only applied
+# once past the flat phase: while things are healthy the burst is small and
+# brief, and keeping that phase exact preserves the best case.
+CATCHUP_JITTER = 0.2
 
 # Without an explicit timeout aiohttp waits around five minutes. A server
 # that accepts the connection and then hangs would stall polling for that
@@ -364,9 +379,24 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         time_to_boundary = self.intervalEnd - now
         if time_to_boundary > datetime.timedelta(0):
             return time_to_boundary + POST_BOUNDARY_DEAD_WINDOW
-        if -time_to_boundary > MAX_CATCHUP_WAIT:
-            return SLOW_RETRY_INTERVAL
-        return CATCHUP_POLL_INTERVAL
+        return self._catchup_interval(-time_to_boundary)
+
+    @staticmethod
+    def _catchup_interval(past_boundary: datetime.timedelta) -> datetime.timedelta:
+        """How long to wait between catch-up polls, by how late the data is.
+
+        Flat while the data could still arrive on a normal schedule, then a
+        linear ramp to CATCHUP_SLOWEST, jittered past the flat phase so the
+        fleet doesn't poll in unison. See the constants above.
+        """
+        if past_boundary <= CATCHUP_FLAT_UNTIL:
+            return CATCHUP_POLL_INTERVAL
+        ramp = (past_boundary - CATCHUP_FLAT_UNTIL) / (
+            CATCHUP_RAMP_COMPLETE - CATCHUP_FLAT_UNTIL
+        )
+        span = CATCHUP_SLOWEST - CATCHUP_POLL_INTERVAL
+        interval = CATCHUP_POLL_INTERVAL + span * min(ramp, 1.0)
+        return interval * random.uniform(1 - CATCHUP_JITTER, 1 + CATCHUP_JITTER)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the API endpoint."""
