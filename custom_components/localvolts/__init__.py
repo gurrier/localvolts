@@ -1,11 +1,15 @@
 """The localvolts integration."""
 
+from datetime import timedelta
+import logging
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
-import logging
 
+from .backfill import StatisticsRepair
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
 from .const import (
@@ -100,6 +104,26 @@ async def async_setup_entry(hass, config_entry):
 
     # Load the sensor platform
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
+
+    # Fill any hours of statistics that were missed while this was not running.
+    # Backgrounded so a slow or unreachable API can't hold up setup, and tied
+    # to the entry so it's cancelled on unload.
+    repair = StatisticsRepair(hass, coordinator, config_entry)
+    config_entry.async_create_background_task(
+        hass, repair.async_run(), "localvolts statistics repair"
+    )
+
+    # Then hourly, for gaps that happen while we are running. The timer starts
+    # from setup rather than on the hour, which staggers installations instead
+    # of having every one of them call the API at the same moment. It also
+    # keeps the sweep clear of the top of the hour, when the recorder is busy
+    # compiling the hour that just closed.
+    async def _scheduled_repair(_now) -> None:
+        await repair.async_run()
+
+    config_entry.async_on_unload(
+        async_track_time_interval(hass, _scheduled_repair, timedelta(hours=1))
+    )
 
     return True
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import importlib.util
 import statistics
 import sys
 import types
@@ -57,13 +58,58 @@ def _install_stubs() -> None:
 
     update_coordinator.UpdateFailed = UpdateFailed
     update_coordinator.DataUpdateCoordinator = DataUpdateCoordinator
-    for module in (ha, core, helpers, aiohttp_client, update_coordinator):
+
+    # The backfill module reaches into the recorder; none of it is exercised
+    # by these tests, which cover the pure grouping and comparison logic.
+    components = types.ModuleType("homeassistant.components")
+    components.__path__ = []
+    recorder = types.ModuleType("homeassistant.components.recorder")
+    recorder.__path__ = []
+    recorder.get_instance = lambda hass: None
+    rec_models = types.ModuleType("homeassistant.components.recorder.models")
+    rec_models.StatisticData = dict
+    rec_stats = types.ModuleType("homeassistant.components.recorder.statistics")
+    rec_stats.async_import_statistics = lambda *a, **k: None
+    rec_stats.get_metadata = lambda *a, **k: {}
+    rec_stats.statistics_during_period = lambda *a, **k: {}
+    event = types.ModuleType("homeassistant.helpers.event")
+    event.async_track_time_interval = lambda *a, **k: None
+    entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
+    entity_registry.async_get = lambda hass: None
+    entity_registry.async_entries_for_config_entry = lambda reg, entry_id: []
+    util = types.ModuleType("homeassistant.util")
+    util.__path__ = []
+    util_dt = types.ModuleType("homeassistant.util.dt")
+    util_dt.utcnow = lambda: dt.datetime.now(UTC)
+    util_dt.utc_from_timestamp = lambda ts: dt.datetime.fromtimestamp(ts, UTC)
+
+    for module in (ha, core, helpers, aiohttp_client, update_coordinator, components,
+                   recorder, rec_models, rec_stats, event, entity_registry, util, util_dt):
         sys.modules[module.__name__] = module
 
 
 _install_stubs()
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "custom_components" / "localvolts"))
-import coordinator as C  # noqa: E402
+
+# Load the integration's modules as a package, so their relative imports work
+# without Home Assistant having to be installed.
+_PACKAGE = Path(__file__).resolve().parent.parent / "custom_components" / "localvolts"
+_pkg = types.ModuleType("localvolts_under_test")
+_pkg.__path__ = [str(_PACKAGE)]
+sys.modules["localvolts_under_test"] = _pkg
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(
+        f"localvolts_under_test.{name}", _PACKAGE / f"{name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+C = _load("coordinator")
+B = _load("backfill")
 
 
 def make() -> "C.LocalvoltsDataUpdateCoordinator":
@@ -293,6 +339,59 @@ def test_an_unmeasured_lag_is_distinct_from_a_zero_one():
     c.intervalEnd = BASE
     asyncio.run(c._fetch_update_data())
     assert c.time_past_start == td(0), "a real zero-second lag is a reading, not a blank"
+
+
+# --- statistics repair -----------------------------------------------------
+def test_an_interval_belongs_to_the_hour_it_ends_within():
+    """intervalEnd is the end of the interval, so 07:00 closes the 06:00 hour."""
+    def at(h, m):
+        return dt.datetime(2026, 10, 15, h, m, tzinfo=UTC)
+    assert B.statistics_hour(at(6, 5)) == at(6, 0)
+    assert B.statistics_hour(at(6, 55)) == at(6, 0)
+    assert B.statistics_hour(at(7, 0)) == at(6, 0)   # the boundary case
+    assert B.statistics_hour(at(7, 5)) == at(7, 0)
+
+
+def test_summarise_matches_the_recorders_arithmetic():
+    prices = [0.150, 0.156, 0.161, 0.160, 0.160, 0.158,
+              0.156, 0.156, 0.170, 0.167, 0.165, 0.163]
+    got = B.summarise(prices)
+    assert round(got["mean"], 6) == 0.160167
+    assert got["min"] == 0.150
+    assert got["max"] == 0.170
+
+
+def test_only_hours_the_api_can_improve_are_repaired():
+    hour = dt.datetime(2026, 10, 15, 5, 0, tzinfo=UTC)
+    other = hour + td(hours=1)
+    # recorded 11, API has 12 -> repair; both 12 -> leave alone
+    assert B.hours_needing_repair({hour: 11, other: 12}, {hour: 12, other: 12}) == [hour]
+    # home assistant never wrote the hour at all
+    assert B.hours_needing_repair({}, {hour: 12}) == [hour]
+    # Localvolts never published the interval either - nothing to add
+    assert B.hours_needing_repair({hour: 11}, {hour: 11}) == []
+    # the API knows less than we do; never make the record worse
+    assert B.hours_needing_repair({hour: 12}, {hour: 9}) == []
+
+
+def test_grouping_real_records_into_an_hour():
+    """The 05:00 hour from 15 Oct 2026, the morning of a 10-minute stall."""
+    prices = [14.97705076, 15.5825778, 16.13043559, 16.01048357, 16.00587003,
+              15.77865322, 15.57335072, 15.57335072, 16.99662759, 16.67252646,
+              16.51220597, 16.31613055]
+    records = []
+    for n, price in enumerate(prices, start=1):
+        end = dt.datetime(2026, 10, 14, 18, 0, tzinfo=UTC) + td(minutes=5 * n)
+        records.append({"intervalEnd": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "costsFlexUp": price, "quality": "Exp"})
+    records.append({"intervalEnd": "not-a-date", "costsFlexUp": 99.0})
+    records.append({"intervalEnd": "2026-10-14T18:05:00Z"})          # no price
+    by_hour = B.group_by_hour(records, "costsFlexUp")
+    hour = dt.datetime(2026, 10, 14, 18, 0, tzinfo=UTC)
+    assert list(by_hour) == [hour], "all twelve belong to one hour"
+    assert len(by_hour[hour]) == 12, "and the malformed records are dropped"
+    assert by_hour[hour][0] == 0.150, "converted to $/kWh and rounded as the sensor does"
+    assert round(B.summarise(by_hour[hour])["mean"], 6) == 0.160167
 
 
 # --- runner, so this works without pytest ----------------------------------
