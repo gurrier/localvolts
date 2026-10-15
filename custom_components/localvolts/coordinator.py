@@ -185,10 +185,26 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
         _LOGGER.error("Localvolts config flow request failed: %s", err)
         raise
 
+    if (error := api_error(data)) is not None:
+        raise ValueError(error)
+
     nmis = sorted({item["NMI"] for item in data if "NMI" in item})
     if not nmis:
         raise ValueError("No NMIs found for this account")
     return nmis
+
+
+def api_error(payload: Any) -> str | None:
+    """Return the API's complaint, if the response is an error rather than data.
+
+    Errors come back as HTTP 200 with a one-element list holding an "error"
+    key, so nothing upstream of here will notice them.
+    """
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        error = payload[0].get("error")
+        if error:
+            return str(error).strip()
+    return None
 
 
 class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
@@ -466,6 +482,14 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
 
                     response.raise_for_status()
                     data: Any = await response.json()
+
+                # A bad request comes back as HTTP 200 with an error object,
+                # so raise_for_status saw nothing wrong and the records below
+                # would simply look malformed. Report what the API said.
+                if (error := api_error(data)) is not None:
+                    self._log_fetch_failure(
+                        "Localvolts API refused the request: %s", error)
+                    raise UpdateFailed(f"Localvolts API error: {error}")
 
                 # If the API returns an empty list, log a warning
                 if isinstance(data, list) and not data:

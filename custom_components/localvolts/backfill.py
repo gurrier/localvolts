@@ -70,6 +70,7 @@ from .coordinator import (
     REQUEST_TIMEOUT,
     LocalvoltsDataUpdateCoordinator,
     _build_request,
+    api_error,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,19 +114,6 @@ def statistics_hour(interval_end: datetime.datetime) -> datetime.datetime:
 def summarise(prices: list[float]) -> dict[str, float]:
     """Summarise an hour the way the recorder would have."""
     return {"mean": sum(prices) / len(prices), "min": min(prices), "max": max(prices)}
-
-
-def api_error(payload: Any) -> str | None:
-    """Return the API's complaint, if the response is an error rather than data.
-
-    Errors come back as HTTP 200 with a one-element list holding an "error"
-    key, so nothing upstream of here will notice them.
-    """
-    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
-        error = payload[0].get("error")
-        if error:
-            return str(error).strip()
-    return None
 
 
 def group_by_hour(

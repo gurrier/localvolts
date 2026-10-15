@@ -335,6 +335,19 @@ def test_no_request_is_made_mid_interval():
     assert c.interval_data["costsFlexUp"] == 0.25
 
 
+def test_a_live_api_error_is_reported_rather_than_parsed():
+    """The API answers a bad request with HTTP 200 and an error object, so it
+    reaches the parser looking like one unusable record."""
+    c = serving([{"error": "Invalid NMI"}])
+    try:
+        asyncio.run(c._fetch_update_data())
+    except C.UpdateFailed as err:
+        assert "Invalid NMI" in str(err), "the API's own complaint should survive"
+    else:
+        raise AssertionError("an error response must not pass as data")
+    assert c.interval_data == {}, "and nothing should be believed from it"
+
+
 def test_a_malformed_record_does_not_cost_a_good_one():
     bad = record(5, price=0.5)
     bad["intervalEnd"] = "not-a-date"
