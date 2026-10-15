@@ -2,6 +2,7 @@
 {
   "domain": "localvolts",
   "name": "LocalVolts Integration",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@gurrier"],
   "config_flow": true,
   "dependencies": [],

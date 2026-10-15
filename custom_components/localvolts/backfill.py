@@ -210,6 +210,13 @@ class StatisticsRepair:
 
     async def async_run(self) -> None:
         """Look for gaps and, if there are any, fill them."""
+        # Declared as an after_dependency rather than a dependency: prices work
+        # perfectly well without the recorder, and someone who has turned it
+        # off should not lose the integration along with it.
+        if "recorder" not in self.hass.config.components:
+            _LOGGER.debug("Recorder isn't loaded; nothing to repair")
+            return
+
         entities = self._entity_ids()
         if not entities:
             return
