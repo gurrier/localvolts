@@ -9,7 +9,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
 
-from .backfill import StatisticsRepair
+from .backfill import StatisticsRepair, async_forget_repairs
 from .coordinator import LocalvoltsDataUpdateCoordinator
 
 from .const import (
@@ -130,6 +130,15 @@ async def async_setup_entry(hass, config_entry):
 async def async_unload_entry(hass: HomeAssistant, config_entry):
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(config_entry, ["sensor"])
+
+
+async def async_remove_entry(hass: HomeAssistant, config_entry) -> None:
+    """Clean up after an entry the user has deleted.
+
+    The record of which hours have been repaired is keyed by entry_id, so it
+    would otherwise sit in .storage forever with nothing able to read it.
+    """
+    await async_forget_repairs(hass, config_entry.entry_id)
 
 
 async def async_setup(hass: HomeAssistant, config: dict):

@@ -186,6 +186,9 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
         raise
 
     if (error := api_error(data)) is not None:
+        # The form can only show one of its translated messages, so put the
+        # API's actual words where they can still be found.
+        _LOGGER.error("Localvolts rejected the account lookup: %s", error)
         raise ValueError(error)
 
     nmis = sorted({item["NMI"] for item in data if "NMI" in item})

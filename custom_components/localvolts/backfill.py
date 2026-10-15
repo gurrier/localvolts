@@ -98,6 +98,16 @@ REPAIRABLE = {
 MONETARY_CONVERSION_FACTOR = 100
 
 
+def store_key(entry_id: str) -> str:
+    """Where an entry's record of repaired hours lives."""
+    return f"{entry_id}_statistics_repair"
+
+
+async def async_forget_repairs(hass: HomeAssistant, entry_id: str) -> None:
+    """Drop that record, for an entry being removed."""
+    await Store(hass, STORAGE_VERSION, store_key(entry_id)).async_remove()
+
+
 def statistics_hour(interval_end: datetime.datetime) -> datetime.datetime:
     """Return the hour an interval belongs to.
 
@@ -167,7 +177,7 @@ class StatisticsRepair:
         # out of the window. What we have already done has to be remembered
         # separately - hour -> how many intervals it was rebuilt from.
         self._store: Store = Store(
-            hass, STORAGE_VERSION, f"{config_entry.entry_id}_statistics_repair"
+            hass, STORAGE_VERSION, store_key(config_entry.entry_id)
         )
         self._done: dict[str, int] | None = None
 

@@ -154,6 +154,43 @@ forecast:
 
 If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` in an earlier version, you can remove it - keeping it would now also block that price history from recording, which is no longer necessary.
 
+# Filling gaps in the price statistics
+
+Home Assistant builds an hourly statistic for each price sensor from the twelve
+5-minute windows in the hour. If a price arrives late - because Home Assistant
+was restarting, or the network dropped, or the Localvolts API stalled - the
+window is still written, using the previous interval's price carried forward.
+The hour then looks complete and holds a value that was never published.
+
+Localvolts serves the previous 72 hours of intervals on request, and the late
+records usually turn up eventually. So from v0.9.0 the integration checks its
+own history on startup and once an hour, and where it finds an hour that
+received fewer than twelve intervals it fetches that window, recomputes the
+hour from the real published prices, and writes it over the top.
+
+What you need to know:
+
+- **Only `costs_flex_up` and `earnings_flex_up` are repaired.** Prices are
+  authoritative within the 72-hour window. Consumption and cost figures are
+  estimates until Localvolts' metering partner delivers the next day, so they
+  are deliberately left alone.
+- **Historical statistics can change, in either direction.** A repaired hour's
+  average may go up as well as down, depending on which way prices were moving
+  across the gap. This is the correction, not a fault. On one morning here, a
+  carried-forward price had overstated an hour's peak by 2.9 c/kWh.
+- **Long-term statistics are repaired; the History graph is not.** Home
+  Assistant has an import API for statistics and none for states, so the
+  5-minute trace in History still shows the gap as it happened. The hourly
+  statistics - the ones that are never purged - become correct.
+- **Nothing is invented.** Every value written came from the API. If Localvolts
+  never published the interval either, the existing hour is already the best
+  record that exists and is left untouched.
+- **72 hours is the limit.** A gap older than that when it is found is
+  permanent. Gaps are normally found within an hour of happening.
+
+There is nothing to configure, and no action to take if you would rather it
+did not run - though if the recorder is disabled, it does nothing at all.
+
 # When the sensors go unavailable
 
 A Localvolts price belongs to one 5-minute interval, and the next interval's price can be very different - the NEM moves fast enough that acting on an expired price costs real money. So rather than keep showing a price after the interval it belongs to has ended, the sensors report `unavailable` once no fresh interval has arrived for 90 seconds.
