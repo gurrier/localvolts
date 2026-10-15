@@ -430,8 +430,9 @@ class StatisticsRepair:
 
         # Every candidate hour has now been put to the API, so remember the
         # answer for all of them - including the ones it had nothing better
-        # for. Those are the hours Localvolts never published, and they are
-        # exactly the ones that would otherwise provoke a fetch forever.
+        # for, such as hours predating the install. Those are exactly the ones
+        # that would otherwise provoke a fetch on every sweep, since no amount
+        # of asking will improve them.
         for hour in candidates:
             key = hour.isoformat()
             self._done[key] = max(

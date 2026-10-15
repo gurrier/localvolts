@@ -562,7 +562,7 @@ def test_a_repaired_hour_is_not_fetched_again():
 
 
 def test_an_hour_the_api_cannot_improve_is_still_remembered():
-    """An interval Localvolts never published would otherwise be asked about
+    """An hour the API has nothing better for would otherwise be asked about
     on every sweep for 71 hours, forever answering the same way."""
     _, end = repair_window()
     hour = end - td(hours=3)
