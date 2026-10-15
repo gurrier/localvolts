@@ -11,11 +11,19 @@ usually turn up eventually even when they were late enough to be missed live.
 So the gap is recoverable: fetch the window, recompute the hour from the real
 interval prices, and import it over the top.
 
+Counting the recorder's own 5-minute windows is not enough to find those
+hours. When a price arrives late, the window is still written - from the
+*previous* interval's price, carried forward - so the hour looks complete and
+holds a wrong value. On 13 and 14 October 2026 exactly that happened: eleven
+of twelve intervals arrived, yet all twelve windows were recorded. What gives
+an honest count is the intervalEnd sensor, which records one state per record
+actually received.
+
 Two rules keep this honest:
 
-* Only hours where the API genuinely has more intervals than Home Assistant
-  recorded are touched. If Localvolts never published an interval either, the
-  existing row is already the best that exists and is left alone.
+* Only hours where the API genuinely has more intervals than were received are
+  touched. If Localvolts never published an interval either, the existing row
+  is already the best that exists and is left alone.
 * Only hours that Home Assistant has already compiled are considered, so this
   never races the recorder's own hourly compile.
 
@@ -39,6 +47,7 @@ import aiohttp
 from dateutil import parser as date_parser
 
 from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.history import state_changes_during_period
 from homeassistant.components.recorder.models import StatisticData
 from homeassistant.components.recorder.statistics import (
     async_import_statistics,
@@ -157,6 +166,54 @@ class StatisticsRepair:
                 found[field] = entity_id
         return found
 
+    async def _intervals_received(
+        self, start: datetime.datetime, end: datetime.datetime
+    ) -> dict[datetime.datetime, int] | None:
+        """How many distinct intervals actually reached us, per hour.
+
+        The intervalEnd sensor publishes the end of every record received, so
+        its history is a precise account of what arrived - unlike the 5-minute
+        windows, which get filled with a carried-forward price when one is
+        late. Returns None if that history isn't available (the entity is
+        missing, or someone has excluded it from the recorder), so the caller
+        can fall back to the coarser count rather than assume the worst and
+        rewrite every hour.
+        """
+        registry = er.async_get(self.hass)
+        entity_id = None
+        for entry in er.async_entries_for_config_entry(
+            registry, self.config_entry.entry_id
+        ):
+            if entry.unique_id == f"{self.coordinator.nmi_id}_interval_end":
+                entity_id = entry.entity_id
+                break
+        if entity_id is None:
+            return None
+
+        history = await get_instance(self.hass).async_add_executor_job(
+            partial(
+                state_changes_during_period,
+                self.hass,
+                start - datetime.timedelta(minutes=10),
+                end + datetime.timedelta(minutes=10),
+                entity_id,
+            )
+        )
+        states = history.get(entity_id) or []
+        if not states:
+            return None
+
+        seen: dict[datetime.datetime, set[datetime.datetime]] = {}
+        for state in states:
+            try:
+                interval_end = date_parser.isoparse(state.state)
+            except (TypeError, ValueError):
+                continue
+            if interval_end.tzinfo is None:
+                interval_end = interval_end.replace(tzinfo=datetime.UTC)
+            seen.setdefault(statistics_hour(interval_end), set()).add(interval_end)
+        return {hour: len(ends) for hour, ends in seen.items()}
+
     async def _recorded_counts(
         self, entity_ids: set[str], start: datetime.datetime, end: datetime.datetime
     ) -> dict[str, dict[datetime.datetime, int]]:
@@ -225,24 +282,26 @@ class StatisticsRepair:
         end = (now - COMPILE_MARGIN).replace(minute=0, second=0, microsecond=0)
         start = end - LOOKBACK
 
-        recorded = await self._recorded_counts(set(entities.values()), start, end)
-        # An hour the recorder never wrote doesn't appear at all, so compare
+        received = await self._intervals_received(start, end)
+        if received is None:
+            # No record of what arrived, so fall back to counting windows. That
+            # misses hours whose windows were filled with a carried-forward
+            # price, but it cannot produce a false positive.
+            windows = await self._recorded_counts(set(entities.values()), start, end)
+            received = {}
+            for per_hour in windows.values():
+                for hour, count in per_hour.items():
+                    received[hour] = max(received.get(hour, 0), count)
+
+        # An hour that was never recorded doesn't appear at all, so compare
         # against every hour in the window rather than only the ones present.
         expected_hours = []
         hour = start
         while hour < end:
             expected_hours.append(hour)
             hour += datetime.timedelta(hours=1)
-        incomplete = {
-            entity_id
-            for field, entity_id in entities.items()
-            if any(
-                recorded.get(entity_id, {}).get(h, 0) < INTERVALS_PER_HOUR
-                for h in expected_hours
-            )
-        }
-        if not incomplete:
-            _LOGGER.debug("Statistics are complete for the last %s; nothing to fetch", LOOKBACK)
+        if all(received.get(h, 0) >= INTERVALS_PER_HOUR for h in expected_hours):
+            _LOGGER.debug("Every hour in the last %s is complete; nothing to fetch", LOOKBACK)
             return
 
         try:
@@ -264,7 +323,7 @@ class StatisticsRepair:
                 continue
             by_hour = group_by_hour(records, field)
             available = {h: len(v) for h, v in by_hour.items() if start <= h < end}
-            repairs = hours_needing_repair(recorded.get(entity_id, {}), available)
+            repairs = hours_needing_repair(received, available)
             if not repairs:
                 continue
             rows: list[StatisticData] = [
@@ -277,7 +336,7 @@ class StatisticsRepair:
                 len(rows),
                 entity_id,
                 ", ".join(
-                    f"{h:%Y-%m-%d %H:00} {recorded.get(entity_id, {}).get(h, 0)}->{available[h]}"
+                    f"{h:%Y-%m-%d %H:00} {received.get(h, 0)}->{available[h]}"
                     for h in repairs[:6]
                 )
                 + (" ..." if len(repairs) > 6 else ""),

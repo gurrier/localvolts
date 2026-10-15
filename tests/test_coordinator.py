@@ -68,6 +68,8 @@ def _install_stubs() -> None:
     recorder.get_instance = lambda hass: None
     rec_models = types.ModuleType("homeassistant.components.recorder.models")
     rec_models.StatisticData = dict
+    rec_history = types.ModuleType("homeassistant.components.recorder.history")
+    rec_history.state_changes_during_period = lambda *a, **k: {}
     rec_stats = types.ModuleType("homeassistant.components.recorder.statistics")
     rec_stats.async_import_statistics = lambda *a, **k: None
     rec_stats.get_metadata = lambda *a, **k: {}
@@ -84,7 +86,8 @@ def _install_stubs() -> None:
     util_dt.utc_from_timestamp = lambda ts: dt.datetime.fromtimestamp(ts, UTC)
 
     for module in (ha, core, helpers, aiohttp_client, update_coordinator, components,
-                   recorder, rec_models, rec_stats, event, entity_registry, util, util_dt):
+                   recorder, rec_history, rec_models, rec_stats, event, entity_registry,
+                   util, util_dt):
         sys.modules[module.__name__] = module
 
 
@@ -359,6 +362,21 @@ def test_summarise_matches_the_recorders_arithmetic():
     assert round(got["mean"], 6) == 0.160167
     assert got["min"] == 0.150
     assert got["max"] == 0.170
+
+
+def test_a_filled_window_does_not_mean_the_price_arrived():
+    """13 Oct 2026: 11 intervals arrived, yet all 12 windows were written.
+
+    A late price leaves the window populated with the previous interval's
+    value carried forward, so counting windows reports the hour complete when
+    it isn't. The repair compares intervals received, not windows recorded.
+    """
+    hour = dt.datetime(2026, 10, 12, 18, 0, tzinfo=UTC)
+    windows_recorded = {hour: 12}
+    intervals_received = {hour: 11}
+    api_has = {hour: 12}
+    assert B.hours_needing_repair(windows_recorded, api_has) == [], "window count hides it"
+    assert B.hours_needing_repair(intervals_received, api_has) == [hour], "interval count finds it"
 
 
 def test_only_hours_the_api_can_improve_are_repaired():
