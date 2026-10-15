@@ -19,13 +19,19 @@ of twelve intervals arrived, yet all twelve windows were recorded. What gives
 an honest count is the intervalEnd sensor, which records one state per record
 actually received.
 
-Two rules keep this honest:
+Three rules keep this honest:
 
 * Only hours where the API genuinely has more intervals than were received are
   touched. If Localvolts never published an interval either, the existing row
   is already the best that exists and is left alone.
 * Only hours that Home Assistant has already compiled are considered, so this
   never races the recorder's own hourly compile.
+* Every hour the API is asked about is remembered, answer or not. Fixing an
+  hour doesn't change the evidence that it needed fixing - the intervals were
+  never received and never will be - so without that record the same hours
+  would be re-fetched on every sweep for as long as they stayed in the API's
+  window. A startup sweep asks again about any hour still short of twelve
+  intervals, in case a late one has since appeared.
 
 Nothing here can invent a price. Every value written came from the API.
 
@@ -57,6 +63,7 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .coordinator import (
@@ -79,6 +86,7 @@ MAX_FETCH_SPAN = datetime.timedelta(hours=23)
 # import can't be overwritten moments later by Home Assistant's own summary.
 COMPILE_MARGIN = datetime.timedelta(minutes=10)
 INTERVALS_PER_HOUR = 12
+STORAGE_VERSION = 1
 
 # unique_id suffix -> the API field that feeds it. Both are prices in c/kWh
 # that the sensors publish in $/kWh, rounded the same way the sensors round.
@@ -165,6 +173,34 @@ class StatisticsRepair:
         self.hass = hass
         self.coordinator = coordinator
         self.config_entry = config_entry
+        # Repairing an hour doesn't change the evidence that it needed
+        # repairing: the intervals were never received and never will be, so
+        # the detector would find the same hours every hour until they aged
+        # out of the window. What we have already done has to be remembered
+        # separately - hour -> how many intervals it was rebuilt from.
+        self._store: Store = Store(
+            hass, STORAGE_VERSION, f"{config_entry.entry_id}_statistics_repair"
+        )
+        self._done: dict[str, int] | None = None
+
+    async def _load_done(self, cutoff: datetime.datetime) -> dict[str, int]:
+        """What we have already repaired, forgetting anything out of range.
+
+        Keys are UTC hour boundaries written by isoformat(), so they all carry
+        the same offset and sort lexically in time order - which is what makes
+        comparing them as strings sound.
+        """
+        if self._done is None:
+            self._done = await self._store.async_load() or {}
+        kept = {
+            hour: count
+            for hour, count in self._done.items()
+            if hour >= cutoff.isoformat()
+        }
+        if len(kept) != len(self._done):
+            self._done = kept
+            await self._store.async_save(kept)
+        return self._done
 
     def _entity_ids(self) -> dict[str, str]:
         """Map each repairable API field to the entity that holds it."""
@@ -291,7 +327,7 @@ class StatisticsRepair:
             chunk_start = chunk_end
         return records
 
-    async def async_run(self) -> None:
+    async def async_run(self, first_run: bool = False) -> None:
         """Look for gaps and, if there are any, fill them."""
         # Declared as an after_dependency rather than a dependency: prices work
         # perfectly well without the recorder, and someone who has turned it
@@ -319,15 +355,29 @@ class StatisticsRepair:
                 for hour, count in per_hour.items():
                     received[hour] = max(received.get(hour, 0), count)
 
-        # An hour that was never recorded doesn't appear at all, so compare
-        # against every hour in the window rather than only the ones present.
-        expected_hours = []
+        done = await self._load_done(start)
+        # An hour that was never recorded doesn't appear at all, so consider
+        # every hour in the window rather than only the ones present. An hour
+        # already rebuilt from a full set of intervals can never be improved
+        # on, so it is settled; one rebuilt from fewer is retried only on a
+        # startup sweep, in case the missing intervals have since appeared.
+        best_known: dict[datetime.datetime, int] = {}
         hour = start
         while hour < end:
-            expected_hours.append(hour)
+            best_known[hour] = max(
+                received.get(hour, 0), done.get(hour.isoformat(), 0)
+            )
             hour += datetime.timedelta(hours=1)
-        if all(received.get(h, 0) >= INTERVALS_PER_HOUR for h in expected_hours):
-            _LOGGER.debug("Every hour in the last %s is complete; nothing to fetch", LOOKBACK)
+        candidates = {
+            hour
+            for hour, count in best_known.items()
+            if count < INTERVALS_PER_HOUR
+            and (first_run or hour.isoformat() not in done)
+        }
+        if not candidates:
+            _LOGGER.debug(
+                "Nothing left to repair in the last %s; no history fetched", LOOKBACK
+            )
             return
 
         try:
@@ -341,15 +391,25 @@ class StatisticsRepair:
         metadata = await get_instance(self.hass).async_add_executor_job(
             partial(get_metadata, self.hass, statistic_ids=set(entities.values()))
         )
+        usable = {
+            field: entity_id
+            for field, entity_id in entities.items()
+            if entity_id in metadata
+        }
+        if not usable:
+            # No sensor has produced statistics yet, so there is no series to
+            # repair and no metadata to reuse. Record nothing: the hours are
+            # still open questions once the series exists.
+            _LOGGER.debug("No price statistics exist yet; nothing to repair")
+            return
 
-        for field, entity_id in entities.items():
-            if entity_id not in metadata:
-                # The sensor has never produced statistics, so there is no
-                # series to repair and no metadata to reuse.
-                continue
+        settled: dict[datetime.datetime, int] = {}
+        for field, entity_id in usable.items():
             by_hour = group_by_hour(records, field)
-            available = {h: len(v) for h, v in by_hour.items() if start <= h < end}
-            repairs = hours_needing_repair(received, available)
+            available = {h: len(v) for h, v in by_hour.items() if h in candidates}
+            for hour, count in available.items():
+                settled[hour] = max(settled.get(hour, 0), count)
+            repairs = hours_needing_repair(best_known, available)
             if not repairs:
                 continue
             rows: list[StatisticData] = [
@@ -362,8 +422,19 @@ class StatisticsRepair:
                 len(rows),
                 entity_id,
                 ", ".join(
-                    f"{h:%Y-%m-%d %H:00} {received.get(h, 0)}->{available[h]}"
+                    f"{h:%Y-%m-%d %H:00} {best_known[h]}->{available[h]}"
                     for h in repairs[:6]
                 )
                 + (" ..." if len(repairs) > 6 else ""),
             )
+
+        # Every candidate hour has now been put to the API, so remember the
+        # answer for all of them - including the ones it had nothing better
+        # for. Those are the hours Localvolts never published, and they are
+        # exactly the ones that would otherwise provoke a fetch forever.
+        for hour in candidates:
+            key = hour.isoformat()
+            self._done[key] = max(
+                self._done.get(key, 0), best_known[hour], settled.get(hour, 0)
+            )
+        await self._store.async_save(self._done)

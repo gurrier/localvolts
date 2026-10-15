@@ -79,6 +79,24 @@ def _install_stubs() -> None:
     entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
     entity_registry.async_get = lambda hass: None
     entity_registry.async_entries_for_config_entry = lambda reg, entry_id: []
+    storage = types.ModuleType("homeassistant.helpers.storage")
+
+    class Store:
+        """An in-memory stand-in, shared between instances like the real files."""
+
+        files: dict[str, dict] = {}
+
+        def __init__(self, hass, version, key):
+            self.key = key
+
+        async def async_load(self):
+            data = Store.files.get(self.key)
+            return dict(data) if data is not None else None
+
+        async def async_save(self, data):
+            Store.files[self.key] = dict(data)
+
+    storage.Store = Store
     util = types.ModuleType("homeassistant.util")
     util.__path__ = []
     util_dt = types.ModuleType("homeassistant.util.dt")
@@ -87,7 +105,7 @@ def _install_stubs() -> None:
 
     for module in (ha, core, helpers, aiohttp_client, update_coordinator, components,
                    recorder, rec_history, rec_models, rec_stats, event, entity_registry,
-                   util, util_dt):
+                   storage, util, util_dt):
         sys.modules[module.__name__] = module
 
 
@@ -429,6 +447,183 @@ def test_grouping_real_records_into_an_hour():
     assert len(by_hour[hour]) == 12, "and the malformed records are dropped"
     assert by_hour[hour][0] == 0.150, "converted to $/kWh and rounded as the sensor does"
     assert round(B.summarise(by_hour[hour])["mean"], 6) == 0.160167
+
+
+# --- a repair wired to fakes, to exercise a whole sweep --------------------
+class _Executor:
+    """Stands in for the recorder instance; runs the job inline."""
+
+    async def async_add_executor_job(self, fn, *args):
+        return fn(*args)
+
+
+class _RegistryEntry:
+    def __init__(self, unique_id, entity_id):
+        self.unique_id = unique_id
+        self.entity_id = entity_id
+
+
+class _Coordinator:
+    nmi_id = "NMI1"
+    api_key = "k" * 32
+    partner_id = "1234"
+    user_agent = "ha-localvolts/test"
+
+
+class _Hass:
+    class config:
+        components = {"recorder", "sensor"}
+
+
+ENTITIES = {
+    "NMI1_costsFlexUp": "sensor.localvolts_costsflexup",
+    "NMI1_earningsFlexUp": "sensor.localvolts_earningsflexup",
+    "NMI1_interval_end": "sensor.localvolts_intervalend",
+}
+
+
+def repair_window():
+    """The window a sweep would choose right now."""
+    end = (dt.datetime.now(UTC) - B.COMPILE_MARGIN).replace(
+        minute=0, second=0, microsecond=0
+    )
+    return end - B.LOOKBACK, end
+
+
+def make_repair(short_hours: dict, api_counts: dict):
+    """A StatisticsRepair over a window that is complete but for short_hours.
+
+    short_hours maps an hour to how many intervals were received; api_counts
+    maps an hour to how many the API will offer. Every other hour in the
+    window got all twelve, so it is never a candidate.
+    """
+    start, end = repair_window()
+    received = {}
+    hour = start
+    while hour < end:
+        received[hour] = short_hours.get(hour, B.INTERVALS_PER_HOUR)
+        hour += td(hours=1)
+
+    records = []
+    for hour, count in api_counts.items():
+        for n in range(1, count + 1):
+            interval_end = hour + td(minutes=5 * n)
+            records.append({
+                "intervalEnd": interval_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "costsFlexUp": 10.0 + n,
+                "earningsFlexUp": 8.0 + n,
+                "quality": "Act",
+            })
+
+    B.Store.files.clear()
+    repair = B.StatisticsRepair(_Hass(), _Coordinator(), types.SimpleNamespace(entry_id="e1"))
+    log = types.SimpleNamespace(fetches=0, imports=[])
+
+    B.er.async_entries_for_config_entry = lambda reg, entry_id: [
+        _RegistryEntry(u, e) for u, e in ENTITIES.items()
+    ]
+    B.get_instance = lambda hass: _Executor()
+    B.get_metadata = lambda hass, statistic_ids=None: {
+        entity_id: (1, {"statistic_id": entity_id}) for entity_id in statistic_ids
+    }
+    B.async_import_statistics = lambda hass, meta, rows: log.imports.append(
+        (meta["statistic_id"], [row["start"] for row in rows])
+    )
+
+    async def _fetch(fetch_start, fetch_end):
+        log.fetches += 1
+        return records
+
+    repair._fetch = _fetch
+    repair._intervals_received = lambda s, e: _done(received)
+    return repair, log
+
+
+async def _done(value):
+    return value
+
+
+def test_a_repaired_hour_is_not_fetched_again():
+    """The whole point: the evidence of the gap outlives the gap."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 12})
+
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 1, "the short hour should be investigated"
+    assert sorted(entity for entity, _ in log.imports) == [
+        "sensor.localvolts_costsflexup", "sensor.localvolts_earningsflexup",
+    ], "and both prices rewritten"
+    assert log.imports[0][1] == [hour]
+
+    asyncio.run(repair.async_run())
+    assert log.fetches == 1, "a later sweep must not ask about it again"
+    assert len(log.imports) == 2, "nor import the same hour twice"
+
+
+def test_an_hour_the_api_cannot_improve_is_still_remembered():
+    """An interval Localvolts never published would otherwise be asked about
+    on every sweep for 71 hours, forever answering the same way."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 11})
+
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 1
+    assert log.imports == [], "nothing to add, so nothing written"
+
+    asyncio.run(repair.async_run())
+    assert log.fetches == 1, "the question has been asked and answered"
+
+
+def test_a_restart_asks_again_about_an_incomplete_hour():
+    """A late interval can still turn up, so a startup sweep re-checks."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 11})
+
+    asyncio.run(repair.async_run(first_run=True))
+    asyncio.run(repair.async_run())
+    assert log.fetches == 1
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 2, "but an hour short of twelve is worth one more look"
+
+
+def test_a_complete_window_costs_no_api_calls():
+    repair, log = make_repair({}, {})
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 0
+    assert log.imports == []
+
+
+def test_nothing_is_remembered_before_the_statistics_exist():
+    """Marking hours done while there is no series to repair would lose them."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 12})
+    B.get_metadata = lambda hass, statistic_ids=None: {}
+
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.imports == []
+    assert B.Store.files.get("e1_statistics_repair") in (None, {})
+
+    B.get_metadata = lambda hass, statistic_ids=None: {
+        entity_id: (1, {"statistic_id": entity_id}) for entity_id in statistic_ids
+    }
+    asyncio.run(repair.async_run())
+    assert len(log.imports) == 2, "once the series exists, the hour is repaired"
+
+
+def test_repairs_outside_the_window_are_forgotten():
+    start, end = repair_window()
+    repair, _ = make_repair({}, {})
+    stale = (start - td(hours=5)).isoformat()
+    fresh = (end - td(hours=2)).isoformat()
+    B.Store.files["e1_statistics_repair"] = {stale: 12, fresh: 12}
+
+    remembered = asyncio.run(repair._load_done(start))
+    assert stale not in remembered, "an hour the API no longer serves is dead weight"
+    assert fresh in remembered
 
 
 # --- runner, so this works without pytest ----------------------------------

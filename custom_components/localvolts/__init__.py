@@ -110,7 +110,7 @@ async def async_setup_entry(hass, config_entry):
     # to the entry so it's cancelled on unload.
     repair = StatisticsRepair(hass, coordinator, config_entry)
     config_entry.async_create_background_task(
-        hass, repair.async_run(), "localvolts statistics repair"
+        hass, repair.async_run(first_run=True), "localvolts statistics repair"
     )
 
     # Then hourly, for gaps that happen while we are running. The timer starts
