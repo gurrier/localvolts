@@ -379,6 +379,25 @@ def test_a_filled_window_does_not_mean_the_price_arrived():
     assert B.hours_needing_repair(intervals_received, api_has) == [hour], "interval count finds it"
 
 
+def test_an_api_error_is_not_mistaken_for_data():
+    """The API answers a bad request with HTTP 200 and an error object.
+
+    Nothing upstream notices, so the records just look malformed and the
+    sweep concludes there is nothing to repair. It has to be checked for.
+    """
+    assert B.api_error([{"error": "'from' date cannot be more than 3 days in the past "}]) \
+        == "'from' date cannot be more than 3 days in the past"
+    assert B.api_error([{"intervalEnd": "2026-10-15T00:00:00Z", "costsFlexUp": 1.0}]) is None
+    assert B.api_error([]) is None
+    assert B.api_error({"unexpected": True}) is None
+
+
+def test_the_fetch_window_stays_inside_the_apis_limits():
+    """Verified against the live API: 72h back is refused, as is a 24h span."""
+    assert B.LOOKBACK < dt.timedelta(hours=72)
+    assert B.MAX_FETCH_SPAN < dt.timedelta(hours=24)
+
+
 def test_only_hours_the_api_can_improve_are_repaired():
     hour = dt.datetime(2026, 10, 15, 5, 0, tzinfo=UTC)
     other = hour + td(hours=1)

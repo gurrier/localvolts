@@ -67,11 +67,14 @@ from .coordinator import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# The API refuses a `from` older than this, so there is nothing to be gained
-# by looking further back.
-LOOKBACK = datetime.timedelta(hours=72)
-# And it serves at most this much per call.
-MAX_FETCH_SPAN = datetime.timedelta(hours=24)
+# The API refuses a `from` more than three days old. Asking for exactly 72
+# hours gets rejected once the sweep's own arithmetic rounds down to the hour,
+# so stay an hour inside the limit.
+LOOKBACK = datetime.timedelta(hours=71)
+# "'to' date cannot be more than 24 hours after 'from' date" - and it means
+# strictly less than, so a span of exactly 24h is refused. Verified against
+# the live API: 24h rejected, 23.9h accepted.
+MAX_FETCH_SPAN = datetime.timedelta(hours=23)
 # Leave the most recent hour alone until the recorder has compiled it, so an
 # import can't be overwritten moments later by Home Assistant's own summary.
 COMPILE_MARGIN = datetime.timedelta(minutes=10)
@@ -102,6 +105,19 @@ def statistics_hour(interval_end: datetime.datetime) -> datetime.datetime:
 def summarise(prices: list[float]) -> dict[str, float]:
     """Summarise an hour the way the recorder would have."""
     return {"mean": sum(prices) / len(prices), "min": min(prices), "max": max(prices)}
+
+
+def api_error(payload: Any) -> str | None:
+    """Return the API's complaint, if the response is an error rather than data.
+
+    Errors come back as HTTP 200 with a one-element list holding an "error"
+    key, so nothing upstream of here will notice them.
+    """
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        error = payload[0].get("error")
+        if error:
+            return str(error).strip()
+    return None
 
 
 def group_by_hour(
@@ -260,6 +276,16 @@ class StatisticsRepair:
             async with session.get(url, headers=headers, timeout=REQUEST_TIMEOUT) as response:
                 response.raise_for_status()
                 payload = await response.json()
+            if (error := api_error(payload)) is not None:
+                # The API reports a bad request as HTTP 200 with an error
+                # object, so raise_for_status sees nothing wrong and the
+                # records simply look malformed. Say so instead of quietly
+                # concluding there is nothing to repair.
+                _LOGGER.warning(
+                    "Localvolts refused a history request for %s - %s: %s",
+                    chunk_start, chunk_end, error,
+                )
+                return []
             if isinstance(payload, list):
                 records.extend(item for item in payload if isinstance(item, dict))
             chunk_start = chunk_end
