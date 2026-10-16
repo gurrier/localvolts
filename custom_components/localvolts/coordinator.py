@@ -108,6 +108,15 @@ OUTAGE_WARN_AFTER = datetime.timedelta(minutes=5)
 FAILURE_BACKOFF_BASE = datetime.timedelta(seconds=5)
 FAILURE_BACKOFF_MAX = datetime.timedelta(seconds=30)
 
+# An exp record is the price for the interval in progress, so its intervalEnd
+# is never more than one interval ahead of now. Anything further out can only
+# be a clock or backend fault, and accepting it would be unrecoverable: the
+# schedule sleeps until that intervalEnd arrives, staleness is measured
+# against it, and the ">=" rule refuses every genuine record that follows. So
+# a single bad record would freeze the sensors on a wrong price, with no
+# polling and no log line, until the next restart.
+MAX_INTERVAL_AHEAD = datetime.timedelta(minutes=10)
+
 
 def _format_duration(delta: datetime.timedelta) -> str:
     """Render a gap as e.g. 41m30s, for log lines people read."""
@@ -180,7 +189,11 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
             if response.status in (401, 403, 500):
                 raise LocalvoltsAuthError((await response.text()).strip())
             response.raise_for_status()
-            data = await response.json()
+            try:
+                data = await response.json()
+            except ValueError as err:
+                _LOGGER.error("Localvolts returned a response that was not valid JSON: %s", err)
+                raise
     except (TimeoutError, aiohttp.ClientError) as err:
         _LOGGER.error("Localvolts config flow request failed: %s", err)
         raise
@@ -190,8 +203,11 @@ async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str
         # API's actual words where they can still be found.
         _LOGGER.error("Localvolts rejected the account lookup: %s", error)
         raise ValueError(error)
+    if not isinstance(data, list):
+        _LOGGER.error("Unexpected response from Localvolts: %s", type(data).__name__)
+        raise ValueError("Unexpected response from the Localvolts API")
 
-    nmis = sorted({item["NMI"] for item in data if "NMI" in item})
+    nmis = sorted({item["NMI"] for item in data if isinstance(item, dict) and "NMI" in item})
     if not nmis:
         raise ValueError("No NMIs found for this account")
     return nmis
@@ -484,7 +500,18 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         )
 
                     response.raise_for_status()
-                    data: Any = await response.json()
+                    try:
+                        data: Any = await response.json()
+                    except ValueError as err:
+                        # aiohttp raises its own ClientError for a wrong
+                        # content type, but a JSON content type over a bad
+                        # body (a truncated response, a proxy's error page)
+                        # is a plain ValueError. Left uncaught it escapes as
+                        # an "unexpected" error, which the coordinator base
+                        # class logs with a traceback on every single poll.
+                        self._log_fetch_failure(
+                            "Localvolts API returned a response that was not valid JSON: %s", err)
+                        raise UpdateFailed("Invalid JSON from Localvolts API") from err
 
                 # A bad request comes back as HTTP 200 with an error object,
                 # so raise_for_status saw nothing wrong and the records below
@@ -494,8 +521,13 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         "Localvolts API refused the request: %s", error)
                     raise UpdateFailed(f"Localvolts API error: {error}")
 
+                if not isinstance(data, list):
+                    self._log_fetch_failure(
+                        "Unexpected response from Localvolts API: %s", type(data).__name__)
+                    raise UpdateFailed("Unexpected response shape from Localvolts API")
+
                 # If the API returns an empty list, log a warning
-                if isinstance(data, list) and not data:
+                if not data:
                     self._log_fetch_failure(
                         "No data received, check that your NMI, PartnerID and API Key are correct.")
                     raise UpdateFailed("No data received: Invalid NMI?")
@@ -544,6 +576,20 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                         if last_update_time.tzinfo is None:
                             last_update_time = last_update_time.replace(
                                 tzinfo=tz.UTC)
+
+                        if interval_end > current_utc_time + MAX_INTERVAL_AHEAD:
+                            # Recorded separately so the outage summary can
+                            # show that something arrived and why it was
+                            # refused, without a warning per poll.
+                            quality_counts["exp"] -= 1
+                            quality_counts["exp(future)"] = (
+                                quality_counts.get("exp(future)", 0) + 1
+                            )
+                            _LOGGER.debug(
+                                "Ignoring exp record for %s, %s ahead of now",
+                                interval_end, interval_end - current_utc_time,
+                            )
+                            continue
 
                         if best is None or interval_end > best[1]:
                             best = (item, interval_end, last_update_time)

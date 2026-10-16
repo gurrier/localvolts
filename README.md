@@ -76,6 +76,17 @@ If a sensor shows `unavailable` for a short while, that's normal rather than a s
 
 # The sensors
 
+All five belong to one device per NMI, named `Localvolts <NMI>`, so they are
+grouped together on the Devices page and a household with two sites can tell
+whose sensors are whose.
+
+**A note on units:** `costsFlexUp` and `earningsFlexUp` are in **$/kWh**;
+`forecasted_costs_flex_up` and everything inside its `forecast` attribute are
+in **c/kWh**, exactly as the API sends them. Comparing the two in a template
+needs a factor of 100 - `forecast / 100 < current`, not `forecast < current`.
+Changing the forecast sensor's unit now would break every automation that
+reads it, so the difference stays and is documented here instead.
+
 1) **costsFlexUp** is the marginal IMPORT cost of electricity for you, in $/kWh (including loss factors and network fees) - how much extra your bill increases for each additional kWh you import between now and the end of the current 5-minute interval.
 
 Because it's a rate, you need to convert any change in your power draw (kW) into the energy (kWh) it represents before it means anything in dollars. For example, drawing an extra 1kW for the rest of a freshly-started interval is 1kW × 1/12 hour = 0.083 kWh - multiply that by costsFlexUp to get the actual extra cost of that decision.

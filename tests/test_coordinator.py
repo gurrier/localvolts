@@ -159,11 +159,18 @@ class _Response:
         pass
 
 
+class _BadJson(_Response):
+    async def json(self):
+        raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+
 class _Session:
     def __init__(self, payload):
         self._payload = payload
 
     def get(self, url, headers=None, timeout=None):
+        if self._payload is _BadJson:
+            return _BadJson(None)
         return _Response(self._payload)
 
 
@@ -348,6 +355,55 @@ def test_a_live_api_error_is_reported_rather_than_parsed():
     assert c.interval_data == {}, "and nothing should be believed from it"
 
 
+def test_a_record_from_the_far_future_cannot_capture_the_schedule():
+    """One bad intervalEnd would otherwise park polling until it arrives,
+    hold a wrong price as current, and refuse every real record after it."""
+    c = serving([record(0, price=0.20), record(24 * 60, price=0.99)])
+    asyncio.run(c._fetch_update_data())
+    assert c.interval_data["costsFlexUp"] == 0.20, "the plausible record wins"
+    assert c.intervalEnd == BASE
+    assert c._last_quality_counts == {"exp": 1, "exp(future)": 1}, (
+        "and the refusal is visible in the response summary"
+    )
+
+
+def test_invalid_json_is_an_ordinary_failure():
+    """A JSON content type over a body that isn't JSON must go through the
+    handled path, not escape as an 'unexpected' error that the coordinator
+    base class would log with a traceback on every poll."""
+    c = serving(_BadJson)
+    try:
+        asyncio.run(c._fetch_update_data())
+    except C.UpdateFailed as err:
+        assert "JSON" in str(err)
+    else:
+        raise AssertionError("invalid JSON must fail the poll")
+
+
+def test_a_non_list_payload_is_an_ordinary_failure():
+    c = serving({"message": "maintenance"})
+    try:
+        asyncio.run(c._fetch_update_data())
+    except C.UpdateFailed as err:
+        assert "shape" in str(err)
+    else:
+        raise AssertionError("an object payload must fail the poll")
+
+
+def test_prices_are_converted_in_exactly_one_place():
+    """The sensors and the statistics repair must agree about $/kWh."""
+    from localvolts_under_test.const import to_dollars
+    assert to_dollars(14.97705076) == 0.150
+    assert to_dollars("16.1") == 0.161
+    for bad in ("N/A", None, ""):
+        try:
+            to_dollars(bad)
+        except (TypeError, ValueError):
+            pass
+        else:
+            raise AssertionError(f"{bad!r} must not convert")
+
+
 def test_a_malformed_record_does_not_cost_a_good_one():
     bad = record(5, price=0.5)
     bad["intervalEnd"] = "not-a-date"
@@ -466,6 +522,11 @@ def test_grouping_real_records_into_an_hour():
 class _Executor:
     """Stands in for the recorder instance; runs the job inline."""
 
+    def __init__(self, ready: bool = True):
+        self.async_recorder_ready = asyncio.Event()
+        if ready:
+            self.async_recorder_ready.set()
+
     async def async_add_executor_job(self, fn, *args):
         return fn(*args)
 
@@ -530,7 +591,7 @@ def make_repair(short_hours: dict, api_counts: dict):
 
     B.Store.files.clear()
     repair = B.StatisticsRepair(_Hass(), _Coordinator(), types.SimpleNamespace(entry_id="e1"))
-    log = types.SimpleNamespace(fetches=0, imports=[])
+    log = types.SimpleNamespace(fetches=0, imports=[], spans=[])
 
     B.er.async_entries_for_config_entry = lambda reg, entry_id: [
         _RegistryEntry(u, e) for u, e in ENTITIES.items()
@@ -545,6 +606,7 @@ def make_repair(short_hours: dict, api_counts: dict):
 
     async def _fetch(fetch_start, fetch_end):
         log.fetches += 1
+        log.spans.append((fetch_start, fetch_end))
         return records
 
     repair._fetch = _fetch
@@ -600,6 +662,40 @@ def test_a_restart_asks_again_about_an_incomplete_hour():
     assert log.fetches == 1
     asyncio.run(repair.async_run(first_run=True))
     assert log.fetches == 2, "but an hour short of twelve is worth one more look"
+
+
+def test_a_single_gap_fetches_only_that_hour():
+    """Three days of history to repair one hour is four requests for one."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 12})
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.spans == [(hour, hour + td(hours=1))]
+
+
+def test_the_sweep_waits_for_the_recorder_to_be_ready():
+    """The recorder queues its catch-up compile of missed periods before it
+    declares itself ready. Importing before that would put our rows ahead
+    of its own insert and make it roll back the whole catch-up."""
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 11}, {hour: 12})
+    executor = _Executor(ready=False)
+    B.get_instance = lambda hass: executor
+
+    async def run_with_timeout():
+        try:
+            await asyncio.wait_for(repair.async_run(first_run=True), timeout=0.2)
+        except TimeoutError:
+            return "blocked"
+        return "ran"
+
+    assert asyncio.run(run_with_timeout()) == "blocked"
+    assert log.fetches == 0, "nothing may be fetched, let alone imported"
+
+    executor.async_recorder_ready.set()
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 1 and len(log.imports) == 2
 
 
 def test_a_complete_window_costs_no_api_calls():

@@ -13,13 +13,13 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import DOMAIN, to_dollars
 from .coordinator import LocalvoltsDataUpdateCoordinator
-
-MONETARY_CONVERSION_FACTOR = 100
 
 COSTS_FLEX_UP = "costsFlexUp"
 EARNINGS_FLEX_UP = "earningsFlexUp"
@@ -62,7 +62,20 @@ async def async_setup_entry(
 
 
 class LocalvoltsEntity(CoordinatorEntity, SensorEntity):
-    """Shared availability handling for every Localvolts sensor."""
+    """Shared availability and device handling for every Localvolts sensor."""
+
+    def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        # One device per NMI, so the five sensors are grouped together in
+        # the UI instead of floating loose, and a household with two sites
+        # can tell whose costsFlexUp is whose. A service rather than hardware:
+        # the NMI is a connection point, not a box on the wall.
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.nmi_id)},
+            name=f"Localvolts {coordinator.nmi_id}",
+            manufacturer="Localvolts",
+            entry_type=DeviceEntryType.SERVICE,
+        )
 
     @property
     def available(self) -> bool:
@@ -112,7 +125,7 @@ class LocalvoltsPriceSensor(LocalvoltsSensor):
             # but rejects "N/A", which is exactly the split wanted here;
             # without it a non-numeric value would raise straight out of
             # this property on every update.
-            return round(float(value) / MONETARY_CONVERSION_FACTOR, 3)
+            return to_dollars(value)
         except (TypeError, ValueError):
             if value is not None:
                 _LOGGER.debug(

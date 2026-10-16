@@ -66,6 +66,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .const import to_dollars
 from .coordinator import (
     REQUEST_TIMEOUT,
     LocalvoltsDataUpdateCoordinator,
@@ -83,19 +84,22 @@ LOOKBACK = datetime.timedelta(hours=71)
 # strictly less than, so a span of exactly 24h is refused. Verified against
 # the live API: 24h rejected, 23.9h accepted.
 MAX_FETCH_SPAN = datetime.timedelta(hours=23)
-# Leave the most recent hour alone until the recorder has compiled it, so an
-# import can't be overwritten moments later by Home Assistant's own summary.
+# Leave the most recent hour alone until the recorder has compiled it. The
+# recorder's hourly summary is queued at ten seconds past the hour and its
+# queue is a single FIFO, so anything we queue after that runs after it; the
+# margin only has to outlast the event loop's scheduling of that tick, not
+# the recorder's processing of it. The danger is the other order: a row of
+# ours already present when the recorder's own insert lands collides on the
+# unique index, and the recorder answers by rolling back that entire compile
+# for every entity and logging a "please report this" warning.
 COMPILE_MARGIN = datetime.timedelta(minutes=10)
 INTERVALS_PER_HOUR = 12
 STORAGE_VERSION = 1
 
-# unique_id suffix -> the API field that feeds it. Both are prices in c/kWh
-# that the sensors publish in $/kWh, rounded the same way the sensors round.
-REPAIRABLE = {
-    "costsFlexUp": "costsFlexUp",
-    "earningsFlexUp": "earningsFlexUp",
-}
-MONETARY_CONVERSION_FACTOR = 100
+# The API fields whose sensors can be repaired - each one's unique_id suffix
+# is the field name. Both are prices, converted exactly as the sensors do.
+REPAIRABLE = ("costsFlexUp", "earningsFlexUp")
+INTERVAL_END_SUFFIX = "interval_end"
 
 
 def store_key(entry_id: str) -> str:
@@ -137,7 +141,7 @@ def group_by_hour(
         if raw is None or not end:
             continue
         try:
-            price = round(float(raw) / MONETARY_CONVERSION_FACTOR, 3)
+            price = to_dollars(raw)
             interval_end = date_parser.isoparse(end)
         except (TypeError, ValueError):
             continue
@@ -200,19 +204,22 @@ class StatisticsRepair:
             await self._store.async_save(kept)
         return self._done
 
+    def _entity_id_for(self, suffix: str) -> str | None:
+        """The entity this entry registered under {nmi}_{suffix}, if any."""
+        registry = er.async_get(self.hass)
+        wanted = f"{self.coordinator.nmi_id}_{suffix}"
+        for entry in er.async_entries_for_config_entry(
+            registry, self.config_entry.entry_id
+        ):
+            if entry.unique_id == wanted:
+                return entry.entity_id
+        return None
+
     def _entity_ids(self) -> dict[str, str]:
         """Map each repairable API field to the entity that holds it."""
-        registry = er.async_get(self.hass)
-        by_unique_id = {
-            entry.unique_id: entry.entity_id
-            for entry in er.async_entries_for_config_entry(
-                registry, self.config_entry.entry_id
-            )
-        }
         found = {}
-        for suffix, field in REPAIRABLE.items():
-            entity_id = by_unique_id.get(f"{self.coordinator.nmi_id}_{suffix}")
-            if entity_id:
+        for field in REPAIRABLE:
+            if entity_id := self._entity_id_for(field):
                 found[field] = entity_id
         return found
 
@@ -229,14 +236,7 @@ class StatisticsRepair:
         can fall back to the coarser count rather than assume the worst and
         rewrite every hour.
         """
-        registry = er.async_get(self.hass)
-        entity_id = None
-        for entry in er.async_entries_for_config_entry(
-            registry, self.config_entry.entry_id
-        ):
-            if entry.unique_id == f"{self.coordinator.nmi_id}_interval_end":
-                entity_id = entry.entity_id
-                break
+        entity_id = self._entity_id_for(INTERVAL_END_SUFFIX)
         if entity_id is None:
             return None
 
@@ -309,7 +309,17 @@ class StatisticsRepair:
             )
             async with session.get(url, headers=headers, timeout=REQUEST_TIMEOUT) as response:
                 response.raise_for_status()
-                payload = await response.json()
+                try:
+                    payload = await response.json()
+                except ValueError as err:
+                    # A JSON content type over a body that isn't JSON. Not a
+                    # ClientError, so it would otherwise escape the sweep as
+                    # an unhandled exception.
+                    _LOGGER.warning(
+                        "Localvolts returned invalid JSON for history %s - %s: %s",
+                        chunk_start, chunk_end, err,
+                    )
+                    return []
             if (error := api_error(payload)) is not None:
                 # The API reports a bad request as HTTP 200 with an error
                 # object, so raise_for_status sees nothing wrong and the
@@ -333,6 +343,17 @@ class StatisticsRepair:
         if "recorder" not in self.hass.config.components:
             _LOGGER.debug("Recorder isn't loaded; nothing to repair")
             return
+
+        # The recorder marks itself ready only after it has queued its own
+        # catch-up compile of every statistics period missed while Home
+        # Assistant was off - and that happens after startup completes,
+        # which is later than our first sweep can run. Its queue is a single
+        # FIFO, so waiting here puts any import of ours behind that compile.
+        # Without this, the exact case the repair exists for - hours lost to
+        # downtime - would have us insert the hourly rows first, the
+        # recorder's own insert would then collide on the unique index, and
+        # it would roll back its whole catch-up and never retry it.
+        await get_instance(self.hass).async_recorder_ready.wait()
 
         entities = self._entity_ids()
         if not entities:
@@ -378,8 +399,13 @@ class StatisticsRepair:
             )
             return
 
+        # Only the span the candidates occupy. A single fresh gap is the
+        # common case, and asking for three days to repair one hour would
+        # cost four requests where one does.
+        fetch_start = min(candidates)
+        fetch_end = max(candidates) + datetime.timedelta(hours=1)
         try:
-            records = await self._fetch(start, end)
+            records = await self._fetch(fetch_start, fetch_end)
         except (TimeoutError, aiohttp.ClientError) as err:
             _LOGGER.debug("Couldn't fetch history to repair statistics: %s", err)
             return

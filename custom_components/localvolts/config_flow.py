@@ -8,6 +8,7 @@ import aiohttp
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 
+from .backfill import async_forget_repairs
 from .const import DOMAIN, CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID
 from .coordinator import LocalvoltsAuthError, async_discover_nmis
 
@@ -218,6 +219,11 @@ class LocalvoltsOptionsFlowHandler(config_entries.OptionsFlow):
                 }
                 if nmi_changed:
                     update_kwargs["unique_id"] = new_nmi_id
+                    # The record of repaired statistics hours is keyed by
+                    # entry, not NMI. Left in place it would describe the
+                    # old NMI's sensors, and the new NMI's brand-new series
+                    # would be treated as already settled for three days.
+                    await async_forget_repairs(self.hass, self.config_entry.entry_id)
                 self.hass.config_entries.async_update_entry(
                     self.config_entry, **update_kwargs
                 )
