@@ -187,8 +187,7 @@ What you need to know:
   are deliberately left alone.
 - **Historical statistics can change, in either direction.** A repaired hour's
   average may go up as well as down, depending on which way prices were moving
-  across the gap. This is the correction, not a fault. On one morning here, a
-  carried-forward price had overstated an hour's peak by 2.9 c/kWh.
+  across the gap. This is the correction, not a fault.
 - **Long-term statistics are repaired; the History graph is not.** Home
   Assistant has an import API for statistics and none for states, so the
   5-minute trace in History still shows the gap as it happened. The hourly
