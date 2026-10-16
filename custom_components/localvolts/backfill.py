@@ -184,6 +184,22 @@ class StatisticsRepair:
             hass, STORAGE_VERSION, store_key(config_entry.entry_id)
         )
         self._done: dict[str, int] | None = None
+        # What the most recent sweep concluded, for diagnostics. The repair
+        # otherwise leaves no trace unless debug logging is on, so a support
+        # thread couldn't tell whether it ran, what it found, or what it did.
+        self.last_sweep: dict[str, Any] | None = None
+
+    @property
+    def remembered(self) -> dict[str, int]:
+        """Hours already put to the API, and how many intervals each got."""
+        return dict(self._done or {})
+
+    def _finish(self, outcome: str, **detail: Any) -> None:
+        self.last_sweep = {
+            "at": dt_util.utcnow().isoformat(),
+            "outcome": outcome,
+            **detail,
+        }
 
     async def _load_done(self, cutoff: datetime.datetime) -> dict[str, int]:
         """What we have already repaired, forgetting anything out of range.
@@ -342,6 +358,7 @@ class StatisticsRepair:
         # off should not lose the integration along with it.
         if "recorder" not in self.hass.config.components:
             _LOGGER.debug("Recorder isn't loaded; nothing to repair")
+            self._finish("recorder not loaded")
             return
 
         # The recorder marks itself ready only after it has queued its own
@@ -357,6 +374,7 @@ class StatisticsRepair:
 
         entities = self._entity_ids()
         if not entities:
+            self._finish("no repairable entities registered")
             return
 
         now = dt_util.utcnow()
@@ -397,6 +415,7 @@ class StatisticsRepair:
             _LOGGER.debug(
                 "Nothing left to repair in the last %s; no history fetched", LOOKBACK
             )
+            self._finish("nothing to repair", first_run=first_run)
             return
 
         # Only the span the candidates occupy. A single fresh gap is the
@@ -404,12 +423,15 @@ class StatisticsRepair:
         # cost four requests where one does.
         fetch_start = min(candidates)
         fetch_end = max(candidates) + datetime.timedelta(hours=1)
+        span = {"from": fetch_start.isoformat(), "to": fetch_end.isoformat()}
         try:
             records = await self._fetch(fetch_start, fetch_end)
         except (TimeoutError, aiohttp.ClientError) as err:
             _LOGGER.debug("Couldn't fetch history to repair statistics: %s", err)
+            self._finish("fetch failed", error=str(err), fetched=span, first_run=first_run)
             return
         if not records:
+            self._finish("api returned no usable records", fetched=span, first_run=first_run)
             return
 
         metadata = await get_instance(self.hass).async_add_executor_job(
@@ -425,9 +447,11 @@ class StatisticsRepair:
             # repair and no metadata to reuse. Record nothing: the hours are
             # still open questions once the series exists.
             _LOGGER.debug("No price statistics exist yet; nothing to repair")
+            self._finish("no statistics series to repair yet", fetched=span, first_run=first_run)
             return
 
         settled: dict[datetime.datetime, int] = {}
+        repaired: dict[str, list[str]] = {}
         for field, entity_id in usable.items():
             by_hour = group_by_hour(records, field)
             available = {h: len(v) for h, v in by_hour.items() if h in candidates}
@@ -441,6 +465,9 @@ class StatisticsRepair:
             ]
             _, existing_metadata = metadata[entity_id]
             async_import_statistics(self.hass, existing_metadata, rows)
+            repaired[entity_id] = [
+                f"{h.isoformat()} {best_known[h]}->{available[h]}" for h in repairs
+            ]
             _LOGGER.info(
                 "Repaired %d hour(s) of statistics for %s (%s)",
                 len(rows),
@@ -463,3 +490,10 @@ class StatisticsRepair:
                 self._done.get(key, 0), best_known[hour], settled.get(hour, 0)
             )
         await self._store.async_save(self._done)
+        self._finish(
+            "repaired" if repaired else "nothing the api could improve",
+            first_run=first_run,
+            fetched=span,
+            candidates=[h.isoformat() for h in sorted(candidates)],
+            repaired=repaired,
+        )

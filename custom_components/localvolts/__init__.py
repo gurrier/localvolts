@@ -1,5 +1,6 @@
 """The localvolts integration."""
 
+from dataclasses import dataclass
 from datetime import timedelta
 import logging
 
@@ -25,6 +26,14 @@ from .const import (
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class LocalvoltsRuntimeData:
+    """Everything an entry keeps alive while it is loaded."""
+
+    coordinator: LocalvoltsDataUpdateCoordinator
+    repair: StatisticsRepair
 
 
 async def _async_migrate_unique_ids(hass: HomeAssistant, config_entry, nmi_id: str) -> None:
@@ -100,7 +109,9 @@ async def async_setup_entry(hass, config_entry):
     # Store on the entry itself rather than a hass.data[DOMAIN] dict keyed by
     # entry_id - besides being the current convention, it rules out the kind
     # of key-collision-between-entries bug fixed in gurrier/localvolts#22.
-    config_entry.runtime_data = coordinator
+    # The repair rides along so diagnostics can report what it has done.
+    repair = StatisticsRepair(hass, coordinator, config_entry)
+    config_entry.runtime_data = LocalvoltsRuntimeData(coordinator, repair)
 
     # Load the sensor platform
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
@@ -108,7 +119,6 @@ async def async_setup_entry(hass, config_entry):
     # Fill any hours of statistics that were missed while this was not running.
     # Backgrounded so a slow or unreachable API can't hold up setup, and tied
     # to the entry so it's cancelled on unload.
-    repair = StatisticsRepair(hass, coordinator, config_entry)
     config_entry.async_create_background_task(
         hass, repair.async_run(first_run=True), "localvolts statistics repair"
     )

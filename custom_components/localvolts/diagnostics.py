@@ -28,7 +28,8 @@ async def async_get_config_entry_diagnostics(
     how fresh is the data, how far behind is Localvolts publishing, and does
     the payload look the shape we expect.
     """
-    coordinator = config_entry.runtime_data
+    coordinator = config_entry.runtime_data.coordinator
+    repair = config_entry.runtime_data.repair
     now = datetime.datetime.now(datetime.timezone.utc)
 
     interval_end = coordinator.intervalEnd
@@ -61,6 +62,14 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
             "forecast_count": len(coordinator.forecast_data),
+        },
+        # Whether the statistics repair is doing anything: the hours it has
+        # already put to the API (and how many intervals each came back
+        # with), and what the last sweep concluded. "nothing to repair" on
+        # a healthy install is the expected answer.
+        "statistics_repair": {
+            "remembered_hours": repair.remembered,
+            "last_sweep": repair.last_sweep,
         },
         "current_interval": async_redact_data(
             dict(coordinator.interval_data), TO_REDACT

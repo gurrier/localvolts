@@ -634,6 +634,26 @@ def test_a_repaired_hour_is_not_fetched_again():
     asyncio.run(repair.async_run())
     assert log.fetches == 1, "a later sweep must not ask about it again"
     assert len(log.imports) == 2, "nor import the same hour twice"
+    assert repair.last_sweep["outcome"] == "nothing to repair", (
+        "and diagnostics should say so"
+    )
+    assert repair.remembered == {hour.isoformat(): 12}
+
+
+def test_a_repair_is_described_for_diagnostics():
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, _ = make_repair({hour: 11}, {hour: 12})
+    assert repair.last_sweep is None, "nothing has run yet"
+    asyncio.run(repair.async_run(first_run=True))
+    sweep = repair.last_sweep
+    assert sweep["outcome"] == "repaired"
+    assert sweep["fetched"] == {"from": hour.isoformat(), "to": (hour + td(hours=1)).isoformat()}
+    assert sweep["candidates"] == [hour.isoformat()]
+    assert sweep["repaired"] == {
+        "sensor.localvolts_costsflexup": [f"{hour.isoformat()} 11->12"],
+        "sensor.localvolts_earningsflexup": [f"{hour.isoformat()} 11->12"],
+    }
 
 
 def test_an_hour_the_api_cannot_improve_is_still_remembered():
