@@ -82,16 +82,29 @@ def _install_stubs() -> None:
     storage = types.ModuleType("homeassistant.helpers.storage")
 
     class Store:
-        """An in-memory stand-in, shared between instances like the real files."""
+        """An in-memory stand-in, shared between instances like the real files.
+
+        Mirrors the one behaviour of the real Store that matters here: a file
+        written by an older version goes through _async_migrate_func.
+        """
 
         files: dict[str, dict] = {}
+        stored_version = None  # set by a test to simulate an old file
 
         def __init__(self, hass, version, key):
             self.key = key
+            self.version = version
+
+        async def _async_migrate_func(self, old_major, old_minor, old_data):
+            raise NotImplementedError
 
         async def async_load(self):
             data = Store.files.get(self.key)
-            return dict(data) if data is not None else None
+            if data is None:
+                return None
+            if Store.stored_version is not None and Store.stored_version != self.version:
+                return await self._async_migrate_func(Store.stored_version, 1, dict(data))
+            return dict(data)
 
         async def async_save(self, data):
             Store.files[self.key] = dict(data)
@@ -496,6 +509,53 @@ def test_only_hours_the_api_can_improve_are_repaired():
     assert B.hours_needing_repair({hour: 11}, {hour: 11}) == []
     # the API knows less than we do; never make the record worse
     assert B.hours_needing_repair({hour: 12}, {hour: 9}) == []
+
+
+def test_forecasts_are_never_mistaken_for_prices():
+    """During a stall the API serves forecasts for intervals already past.
+    Writing those into statistics would freeze a guess in as history."""
+    hour = dt.datetime(2026, 10, 17, 18, 0, tzinfo=UTC)
+    records = []
+    for n in range(1, 13):
+        end = (hour + td(minutes=5 * n)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        records.append({"intervalEnd": end, "costsFlexUp": 50.0, "quality": "Fcst"})
+    assert B.group_by_hour(records, "costsFlexUp") == {}, "twelve forecasts are no hour at all"
+    records[0]["quality"] = "Exp"
+    records[1]["quality"] = "Act"
+    records[2]["quality"] = "exp"
+    by_hour = B.group_by_hour(records, "costsFlexUp")
+    assert len(by_hour[hour]) == 3, "only the settled ones count, whatever their case"
+
+
+def test_an_hour_of_forecasts_is_not_repaired_and_is_retried_later():
+    _, end = repair_window()
+    hour = end - td(hours=3)
+    repair, log = make_repair({hour: 0}, {hour: 12})
+    # make_repair labels records "Act"; turn every one into a forecast
+    records = asyncio.run(repair._fetch(hour, hour + td(hours=1)))
+    for r in records:
+        r["quality"] = "Fcst"
+    log.fetches = 0  # that peek went through the counted fake
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.imports == [], "nothing settled, nothing written"
+    assert repair.remembered == {hour.isoformat(): 0}, "and the hour stays open"
+    asyncio.run(repair.async_run())
+    assert log.fetches == 1, "not nagged about on the hourly sweep"
+    asyncio.run(repair.async_run(first_run=True))
+    assert log.fetches == 2, "but asked again after a restart"
+
+
+def test_a_version_1_record_is_forgotten():
+    """Version 1 may hold hours rebuilt from forecasts; none of it is kept."""
+    repair, _ = make_repair({}, {})
+    start, _ = repair_window()
+    B.Store.files["e1_statistics_repair"] = {"2099-01-01T00:00:00+00:00": 12}
+    B.Store.stored_version = 1
+    try:
+        remembered = asyncio.run(repair._load_done(start))
+    finally:
+        B.Store.stored_version = None
+    assert remembered == {}
 
 
 def test_grouping_real_records_into_an_hour():

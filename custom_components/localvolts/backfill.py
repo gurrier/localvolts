@@ -33,7 +33,11 @@ Three rules keep this honest:
   window. A startup sweep asks again about any hour still short of twelve
   intervals, in case a late one has since appeared.
 
-Nothing here can invent a price. Every value written came from the API.
+Nothing here can invent a price. Every value written came from the API, and
+only settled records count - "Exp" or "Act". During a stall the API keeps
+serving forecasts, including for intervals already in the past, and a
+forecast is not a price. An hour with fewer than twelve settled records is
+left alone and asked about again at the next startup.
 
 One deliberate difference worth knowing: Home Assistant averages twelve
 wall-clock windows, and because a price arrives ~18s after its interval
@@ -94,7 +98,12 @@ MAX_FETCH_SPAN = datetime.timedelta(hours=23)
 # for every entity and logging a "please report this" warning.
 COMPILE_MARGIN = datetime.timedelta(minutes=10)
 INTERVALS_PER_HOUR = 12
-STORAGE_VERSION = 1
+# Version 1 rebuilt hours without checking record quality, so one repaired
+# during a stall could hold forecasts. Version 2 forgets everything version
+# 1 remembered; the next startup sweep re-checks every hour still short of
+# twelve received intervals, which is exactly the set that was ever repaired.
+STORAGE_VERSION = 2
+SETTLED_QUALITIES = {"exp", "act"}
 
 # The API fields whose sensors can be repaired - each one's unique_id suffix
 # is the field name. Both are prices, converted exactly as the sensors do.
@@ -107,9 +116,17 @@ def store_key(entry_id: str) -> str:
     return f"{entry_id}_statistics_repair"
 
 
+class RepairStore(Store):
+    """The record of repaired hours, with its migration from version 1."""
+
+    async def _async_migrate_func(self, old_major_version, old_minor_version, old_data):
+        # Nothing from version 1 can be trusted, see STORAGE_VERSION.
+        return {}
+
+
 async def async_forget_repairs(hass: HomeAssistant, entry_id: str) -> None:
     """Drop that record, for an entry being removed."""
-    await Store(hass, STORAGE_VERSION, store_key(entry_id)).async_remove()
+    await RepairStore(hass, STORAGE_VERSION, store_key(entry_id)).async_remove()
 
 
 def statistics_hour(interval_end: datetime.datetime) -> datetime.datetime:
@@ -133,9 +150,16 @@ def summarise(prices: list[float]) -> dict[str, float]:
 def group_by_hour(
     records: list[dict[str, Any]], field: str
 ) -> dict[datetime.datetime, list[float]]:
-    """Collect each hour's interval prices, in $/kWh as the sensors publish them."""
+    """Collect each hour's settled interval prices, in $/kWh as the sensors publish them.
+
+    Forecast records are ignored outright, whatever hour they claim: the API
+    serves them for past intervals during a stall, and a forecast written
+    into statistics would be indistinguishable from the real price later.
+    """
     by_hour: dict[datetime.datetime, list[float]] = {}
     for item in records:
+        if str(item.get("quality") or "").lower() not in SETTLED_QUALITIES:
+            continue
         raw = item.get(field)
         end = item.get("intervalEnd")
         if raw is None or not end:
@@ -180,7 +204,7 @@ class StatisticsRepair:
         # the detector would find the same hours every hour until they aged
         # out of the window. What we have already done has to be remembered
         # separately - hour -> how many intervals it was rebuilt from.
-        self._store: Store = Store(
+        self._store: Store = RepairStore(
             hass, STORAGE_VERSION, store_key(config_entry.entry_id)
         )
         self._done: dict[str, int] | None = None
