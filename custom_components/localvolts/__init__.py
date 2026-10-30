@@ -66,6 +66,13 @@ async def _async_migrate_unique_ids(hass: HomeAssistant, config_entry, nmi_id: s
                 entry.entity_id, entry.unique_id, new_unique_id,
             )
             registry.async_update_entity(entry.entity_id, new_unique_id=new_unique_id)
+        # A pre-release 0.10.0 build named the site sensor "Localvolts Site"
+        # without has_entity_name; on HA 2026.9+ that produced an entity id
+        # with "localvolts" in it twice. Fold it into the proper id.
+        if entry.unique_id == f"{nmi_id}_site" and entry.entity_id.endswith("_localvolts_site"):
+            wanted = entry.entity_id.replace("_localvolts_site", "_site")
+            if registry.async_get(wanted) is None:
+                registry.async_update_entity(entry.entity_id, new_entity_id=wanted)
 
 
 async def async_setup_entry(hass, config_entry):

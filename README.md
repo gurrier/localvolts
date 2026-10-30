@@ -81,6 +81,14 @@ grouped together on the Devices page and a household with two sites can tell
 whose sensors are whose. The device's model shows your network and tariff -
 `Ausgrid EA116`, say - once Localvolts have described the site (see 6).
 
+**A note on entity IDs:** the examples in this README use the IDs that
+installations have had since the beginning - `sensor.costsflexup` and so on.
+Existing installations keep them. Home Assistant 2026.9 changed how IDs are
+generated for *new* entities that belong to a device, prefixing the device
+name, so a fresh install on a recent Home Assistant gets
+`sensor.localvolts_<nmi>_costsflexup` instead. Your actual IDs are listed on
+the device page; substitute them in the examples.
+
 **A note on units:** `costsFlexUp` and `earningsFlexUp` are in **$/kWh**;
 `forecasted_costs_flex_up` and everything inside its `forecast` attribute are
 in **c/kWh**, exactly as the API sends them. Comparing the two in a template
@@ -162,7 +170,7 @@ forecast:
   friendly_name: Forecasted Costs Flex Up
 ```
 
-6) **localvolts_site** is what Localvolts know about your site, from their
+6) **site** (`sensor.localvolts_<nmi>_site`) is what Localvolts know about your site, from their
 metadata API: the state is your import tariff code (for example `EA116`), and
 the attributes carry the region, network (LNSP), meter data provider, read
 type, the date you joined, and the tariff for each metered circuit - import,

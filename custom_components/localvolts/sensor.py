@@ -296,7 +296,12 @@ class LocalvoltsSiteSensor(LocalvoltsEntity):
     so it sits with the device rather than among the prices.
     """
 
-    _attr_name = "Localvolts Site"
+    # Named the modern way, unlike the five older sensors: HA composes
+    # "Localvolts <NMI> Site" and the entity id localvolts_<nmi>_site itself,
+    # on every version. Without this, HA 2026.9+ (which prefixes the device
+    # name into new entity ids regardless) produced "..._localvolts_site".
+    _attr_has_entity_name = True
+    _attr_name = "Site"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:transmission-tower"
 
