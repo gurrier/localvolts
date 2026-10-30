@@ -68,6 +68,20 @@ class SiteInfo:
         return circuit.tariff if circuit else None
 
     @property
+    def export_circuit(self) -> Circuit | None:
+        """The feed-in circuit, if the site has one. No guessing: a site with
+        no export circuit has no export tariff, and saying so is the answer."""
+        for circuit in self.circuits:
+            if circuit.circuit.lower() == "export":
+                return circuit
+        return None
+
+    @property
+    def export_tariff(self) -> str | None:
+        circuit = self.export_circuit
+        return circuit.tariff if circuit else None
+
+    @property
     def model(self) -> str | None:
         """Network and tariff, as the device's model - "Ausgrid EA116"."""
         parts = [p for p in (self.lnsp, self.import_tariff) if p]

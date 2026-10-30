@@ -833,6 +833,7 @@ def test_site_metadata_is_read_per_circuit():
     assert site.lnsp == "Ausgrid" and site.region == "NSW" and site.joined == "2025-03-13"
     assert [c.circuit for c in site.circuits] == ["Export", "Import"]
     assert site.import_tariff == "EA116", "the Import circuit wins even when listed second"
+    assert site.export_tariff == "GGENR2"
     assert site.model == "Ausgrid EA116"
     attrs = site.as_attributes()
     assert attrs["network"] == "Ausgrid"
@@ -846,6 +847,9 @@ def test_site_metadata_tolerates_what_the_api_might_send():
     assert M.parse_metadata([]) is None
     only_export = M.parse_metadata([SITE_RECORDS[0]])
     assert only_export.import_tariff == "GGENR2", "with no Import circuit the first one stands in"
+    only_import = M.parse_metadata([SITE_RECORDS[1]])
+    assert only_import.export_tariff is None, "but a site that doesn't export has no export tariff"
+    assert only_import.export_circuit is None
     blanks = M.parse_metadata([{"Circuit": "Import", "Tariff": "  ", "LNSP": None}])
     assert blanks.import_tariff is None and blanks.model is None, "blank fields are None, not ''"
 

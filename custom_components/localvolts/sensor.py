@@ -58,8 +58,17 @@ async def async_setup_entry(
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
             LocalvoltsForecastCostsSensor(coordinator),
+            LocalvoltsImportTariffSensor(coordinator),
+            LocalvoltsNetworkSensor(coordinator),
             LocalvoltsSiteSensor(coordinator),
         ]
+        # Only sites that export get an export tariff; a sensor that would
+        # read unknown forever is clutter, not information.
+        + (
+            [LocalvoltsExportTariffSensor(coordinator)]
+            if coordinator.site and coordinator.site.export_circuit
+            else []
+        )
     )
 
 
@@ -287,39 +296,85 @@ class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
         return attributes
 
 
-class LocalvoltsSiteSensor(LocalvoltsEntity):
-    """What Localvolts know about the site: network, tariff, meter provider.
+class LocalvoltsSiteEntity(LocalvoltsEntity):
+    """A fact about the site, from the metadata call.
 
-    The state is the import tariff code, the one fact most likely to matter
-    in an automation; everything else - region, network, meter data
-    provider, per-circuit tariffs - rides along as attributes. Diagnostic,
-    so it sits with the device rather than among the prices.
+    Diagnostic, so these sit with the device rather than among the prices,
+    and available whenever the site has been described - price freshness
+    has nothing to do with it. Named the modern way, unlike the five older
+    sensors: HA composes "Localvolts <NMI> <name>" and the matching entity
+    id itself, the same on every version.
     """
 
-    # Named the modern way, unlike the five older sensors: HA composes
-    # "Localvolts <NMI> Site" and the entity id localvolts_<nmi>_site itself,
-    # on every version. Without this, HA 2026.9+ (which prefixes the device
-    # name into new entity ids regardless) produced "..._localvolts_site".
     _attr_has_entity_name = True
-    _attr_name = "Site"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:transmission-tower"
+    _unique_suffix = ""
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.nmi_id}_site"
+        self._attr_unique_id = f"{coordinator.nmi_id}_{self._unique_suffix}"
 
     @property
     def available(self) -> bool:
-        """Depends on the metadata call having answered, not on price freshness."""
         return self.coordinator.site is not None
+
+    def _site_value(self, site):
+        raise NotImplementedError
 
     @property
     def native_value(self):
         site = self.coordinator.site
-        return site.import_tariff if site else None
+        return self._site_value(site) if site else None
+
+
+class LocalvoltsImportTariffSensor(LocalvoltsSiteEntity):
+    """The tariff you pay on - "EA116"."""
+
+    _attr_name = "Import tariff"
+    _attr_icon = "mdi:transmission-tower-import"
+    _unique_suffix = "import_tariff"
+
+    def _site_value(self, site):
+        return site.import_tariff
+
+
+class LocalvoltsExportTariffSensor(LocalvoltsSiteEntity):
+    """The tariff you're paid on - "GGENR2". Only created for sites that export."""
+
+    _attr_name = "Export tariff"
+    _attr_icon = "mdi:transmission-tower-export"
+    _unique_suffix = "export_tariff"
+
+    def _site_value(self, site):
+        return site.export_tariff
+
+
+class LocalvoltsNetworkSensor(LocalvoltsSiteEntity):
+    """The poles-and-wires company - "Ausgrid"."""
+
+    _attr_name = "Network"
+    _attr_icon = "mdi:transmission-tower"
+    _unique_suffix = "network"
+
+    def _site_value(self, site):
+        return site.lnsp
+
+
+class LocalvoltsSiteSensor(LocalvoltsSiteEntity):
+    """The region, with everything that didn't earn its own sensor as attributes."""
+
+    _attr_name = "Site"
+    _attr_icon = "mdi:home-lightning-bolt"
+    _unique_suffix = "site"
+
+    def _site_value(self, site):
+        return site.region
 
     @property
     def extra_state_attributes(self):
         site = self.coordinator.site
-        return site.as_attributes() if site else {}
+        if not site:
+            return {}
+        attributes = site.as_attributes()
+        attributes.pop("region", None)  # that's the state
+        return attributes

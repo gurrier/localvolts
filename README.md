@@ -76,7 +76,7 @@ If a sensor shows `unavailable` for a short while, that's normal rather than a s
 
 # The sensors
 
-All six belong to one device per NMI, named `Localvolts <NMI>`, so they are
+All of them belong to one device per NMI, named `Localvolts <NMI>`, so they are
 grouped together on the Devices page and a household with two sites can tell
 whose sensors are whose. The device's model shows your network and tariff -
 `Ausgrid EA116`, say - once Localvolts have described the site (see 6).
@@ -170,13 +170,19 @@ forecast:
   friendly_name: Forecasted Costs Flex Up
 ```
 
-6) **site** (`sensor.localvolts_<nmi>_site`) is what Localvolts know about your site, from their
-metadata API: the state is your import tariff code (for example `EA116`), and
-the attributes carry the region, network (LNSP), meter data provider, read
-type, the date you joined, and the tariff for each metered circuit - import,
-export, controlled load. It is a diagnostic sensor, so it appears with the
-device rather than among the prices, and it refreshes once a day. If the
-metadata call fails it shows unavailable; the price sensors are unaffected.
+6) **Site facts** - four diagnostic sensors, from Localvolts' metadata API,
+shown on the device page rather than among the prices:
+   - **Import tariff** (`sensor.localvolts_<nmi>_import_tariff`), the tariff
+     you pay on, e.g. `EA116`;
+   - **Export tariff** (`..._export_tariff`), the tariff you're paid on, e.g.
+     `GGENR2` - only created for sites with an export circuit;
+   - **Network** (`..._network`), your poles-and-wires company, e.g. `Ausgrid`;
+   - **Site** (`..._site`), your NEM region, with the rest as attributes:
+     jurisdiction, meter data provider, read type, the date you joined, DLF
+     and TNI codes, and every metered circuit with its tariff.
+
+   They refresh once a day. If the metadata call fails they show unavailable;
+   the price sensors are unaffected.
 
 **A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. As of v0.7.4, this is handled automatically: the integration tells the recorder to skip just that one oversized attribute, so you won't see the warnings and there's nothing to configure yourself. The sensor's price value still records and shows history/statistics normally - only the large rolling forecast list itself is excluded.
 
