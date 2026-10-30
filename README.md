@@ -89,6 +89,11 @@ name, so a fresh install on a recent Home Assistant gets
 `sensor.localvolts_<nmi>_costsflexup` instead. Your actual IDs are listed on
 the device page; substitute them in the examples.
 
+Removing the integration and adding it again within 30 days keeps your entity
+IDs and history, as Home Assistant remembers deleted entities for that long.
+After 30 days it generates new IDs; renaming an entity back to its original
+ID (Settings > Entities > the entity > Entity ID) reattaches the old history.
+
 **A note on units:** `costsFlexUp` and `earningsFlexUp` are in **$/kWh**;
 `forecasted_costs_flex_up` and everything inside its `forecast` attribute are
 in **c/kWh**, exactly as the API sends them. Comparing the two in a template
