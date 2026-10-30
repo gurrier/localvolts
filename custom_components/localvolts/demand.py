@@ -7,6 +7,11 @@ and the saving from lowering it (`flexDemandDown`). Outside a demand window,
 or in a month the tariff doesn't track, both are 0 - which is not "unknown",
 it is the answer: extra load now is free of demand charges.
 
+The peak they are measured against is retrospective: meter data reaches
+Localvolts from the metering provider the following morning, so `maxDemand`
+is the month's peak as settled so far, not including today. It is the
+running target to stay under, not a live position against it.
+
 These fields exist only in the v2 API, where each interval is one record per
 circuit. Demand charges apply to the main load, so the Import circuit's
 record is the one that matters. This module parses only, so it can be tested

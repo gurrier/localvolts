@@ -176,10 +176,16 @@ the unit your network bills demand in (`c/kW/Day` for most, `$/kW/Month` for
 some). Demand tariffs charge for the month's peak average demand inside a
 demand window, so this reads **0** whenever extra load carries no demand
 charge - outside the window, or in a month the tariff doesn't track - and
-rises as current demand approaches the month's peak. Zero is a real reading,
-not "unknown". `flexDemandDown`, `maxDemand` and the interval it applies to
-are attributes. It goes unavailable with the price sensors. If your tariff
-has no demand component it simply stays at 0.
+rises as the month's peak comes within reach. Zero is a real reading, not
+"unknown". `flexDemandDown`, `maxDemand` and the interval it applies to are
+attributes. It goes unavailable with the price sensors. If your tariff has
+no demand component it simply stays at 0.
+
+   One thing to know: the peak it works from is retrospective. Your meter
+   data reaches Localvolts from the metering provider the following morning,
+   so `maxDemand` is the month's peak *as settled so far*, not including
+   today. Treat it as the running target to stay under rather than a live
+   reading of where you are against it right now.
 
 7) **Site facts** - four diagnostic sensors, from Localvolts' metadata API,
 shown on the device page rather than among the prices:
