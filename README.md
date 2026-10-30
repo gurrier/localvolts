@@ -1,383 +1,67 @@
 # Localvolts
 
-An integration for Home Assistant for customers of Localvolts electricity retailer in Australia.
+A Home Assistant integration for customers of [Localvolts](https://localvolts.com), the Australian electricity retailer.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
 
-It exposes what a kilowatt-hour actually costs you right now, what you'd earn exporting one, and a 24-hour forecast of both - updated every 5 minutes. That lets your automations decide when to run appliances, charge or discharge a battery, or export to the grid.
+It tells you what a kilowatt-hour costs you *right now*, what you'd earn exporting one, what it will cost over the next 24 hours, and - on a demand tariff - what one more kilowatt would add to your demand charge. Everything updates every 5 minutes, so your automations can decide when to run appliances, charge or discharge a battery, or export to the grid.
 
-☕ If this integration's useful to you, [buy me a coffee](https://ko-fi.com/gurrier).
-
----
-
-# Before you start
-
-You need to be a Localvolts customer - you can join at https://localvolts.com/register/
-
-Once you have an account, both of the things you need are on the Localvolts website under **My Profile → API Key**:
-
-- **API key**
-- **Partner ID**
-
-If the API key isn't showing there, you can request one using the form at https://localvolts.com/localvolts-api/
-
-You don't need to look up your NMI. The integration asks Localvolts which NMIs are registered to your account and offers them to you during setup.
-
-# Installing
-
-The quickest way: click the badge below to open HACS on your own Home Assistant instance with this repository ready to install.
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gurrier&repository=localvolts&category=integration)
-
-Or find it in HACS yourself:
-
-1. Open HACS, go to the "Integrations" section.
-2. Search for "Localvolts".
-3. Click it, then "Download".
-
-If you'd rather add it as a custom repository instead (for example, to track a specific branch), that still works too:
-
-1. Click on the 3 dots in the top right corner.
-2. Select "Custom repositories"
-3. Add the URL to the repository. https://github.com/gurrier/localvolts
-4. Select the integration category.
-5. Click the "ADD" button.
-
-Restart Home Assistant once it's downloaded.
-
-# Setting it up
-
-Go to **Settings → Devices & Services → Add Integration** and search for Localvolts. You'll be asked for just two things:
-
-```
-  api_key: "abc123abc123abc123abc123abc123ab"
-  partner_id: "12345"
-```
-
-That's all you enter. The integration then asks Localvolts which NMIs are registered to your account: if there's only one it's selected for you automatically, and if you have several sites you choose the one you want from a list. To set up an additional site, add the integration again and pick a different NMI.
-
-To change any of this later, use the cog icon on the integration. It asks for the same two credentials and then lets you confirm or change the NMI, with your current one pre-selected.
-
-# Checking it worked
-
-Look for these entities:
-
-- `sensor.costsflexup`
-- `sensor.earningsflexup`
-- `sensor.datalag`
-- `sensor.intervalend`
-- `sensor.forecasted_costs_flex_up`
-
-If they're populated with numbers, you're set. Now you can create automations that orchestrate your appliances based on what electricity will cost you, or what you'll earn exporting it.
-
-If a sensor shows `unavailable` for a short while, that's normal rather than a sign of a broken setup - see [When the sensors go unavailable](#when-the-sensors-go-unavailable) below.
+☕ If it's useful to you, [buy me a coffee](https://ko-fi.com/gurrier).
 
 ---
 
-# The sensors
+## Install
 
-All of them belong to one device per NMI, named `Localvolts <NMI>`, so they are
-grouped together on the Devices page and a household with two sites can tell
-whose sensors are whose. The device's model shows your network and tariff -
-`Ausgrid EA116`, say - once Localvolts have described the site (see 6).
+1. Click the badge above, or open HACS → Integrations, search for **Localvolts**, and download it.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services → Add Integration**, search for Localvolts, and enter your **API key** and **Partner ID**. Both are on the Localvolts website under **My Profile → API Key** (request one at https://localvolts.com/localvolts-api/ if it isn't there).
 
-**A note on entity IDs:** the examples in this README use the IDs that
-installations have had since the beginning - `sensor.costsflexup` and so on.
-Existing installations keep them. Home Assistant 2026.9 changed how IDs are
-generated for *new* entities that belong to a device, prefixing the device
-name, so a fresh install on a recent Home Assistant gets
-`sensor.localvolts_<nmi>_costsflexup` instead. Your actual IDs are listed on
-the device page; substitute them in the examples.
+That's all you type. The integration asks Localvolts which sites (NMIs) are on your account: one site is selected for you, several gives you a list. To add another site, add the integration again. To change credentials later, use the cog on the integration.
 
-Removing the integration and adding it again within 30 days keeps your entity
-IDs and history, as Home Assistant remembers deleted entities for that long.
-After 30 days it generates new IDs; renaming an entity back to its original
-ID (Settings > Entities > the entity > Entity ID) reattaches the old history.
+To check it worked, open **Settings → Devices & Services → Localvolts** and click the device. You should see prices within a minute.
 
-**A note on units:** `costsFlexUp` and `earningsFlexUp` are in **$/kWh**;
-`forecasted_costs_flex_up` and everything inside its `forecast` attribute are
-in **c/kWh**, exactly as the API sends them. Comparing the two in a template
-needs a factor of 100 - `forecast / 100 < current`, not `forecast < current`.
-Changing the forecast sensor's unit now would break every automation that
-reads it, so the difference stays and is documented here instead.
+## What you get
 
-1) **costsFlexUp** is the marginal IMPORT cost of electricity for you, in $/kWh (including loss factors and network fees) - how much extra your bill increases for each additional kWh you import between now and the end of the current 5-minute interval.
+One device per site, named `Localvolts <NMI>`, showing your network and tariff as its model. On it:
 
-Because it's a rate, you need to convert any change in your power draw (kW) into the energy (kWh) it represents before it means anything in dollars. For example, drawing an extra 1kW for the rest of a freshly-started interval is 1kW × 1/12 hour = 0.083 kWh - multiply that by costsFlexUp to get the actual extra cost of that decision.
+| Sensor | What it is | Unit |
+|---|---|---|
+| **costsFlexUp** | What one more kWh imported costs you, for the current 5-minute interval - including network fees and loss factors | $/kWh |
+| **earningsFlexUp** | What one more kWh exported earns you, for the current interval | $/kWh |
+| **Forecasted Costs Flex Up** | The import price for the *next* interval, with the full 24-hour forecast as its `forecast` attribute | c/kWh |
+| **Demand flex up** | What one more kW of demand would add to your demand charge right now. 0 when no demand charge applies | as billed, e.g. c/kW |
+| **IntervalEnd** | When the current interval ends, with every field Localvolts publish for it as attributes | timestamp |
+| **DataLag** | How long after the interval started Localvolts published its price - typically 15-25 s | s |
+| **Import tariff**, **Export tariff**, **Network**, **Site** | What Localvolts know about your site: tariff codes, your distributor, your region, and more as attributes of Site | diagnostic |
 
-2) **earningsFlexUp** is the current EXPORT price of electricity FOR YOU per additional kWh exported until the end of the current 5 minute interval.
+Entity IDs depend on when you installed: long-standing installations have `sensor.costsflexup` and so on, while recent Home Assistant versions give new entities IDs like `sensor.localvolts_<nmi>_costsflexup`. Your IDs are on the device page - substitute them in the examples below. [Details](docs/details.md#entity-ids).
 
-3) **datalag** is how far into the current 5-minute interval Localvolts published the data, in seconds. Across 3,873 intervals it was 18 seconds at the median, under 30 seconds for 96% of intervals, and under 39 seconds for 99%; the fastest seen is 10 seconds. Roughly 0.8 intervals a day run past 90 seconds, most of those in a cluster between 05:19 and 06:24 local time.
+## Using the prices
 
-4) **intervalEnd** contains attributes for all of the data from the Localvolts API for the current 5 minute interval.
+Three things to know, and you can skip the rest of this page.
 
-5) **forecasted_costs_flex_up** state reflects the costsFlexUp of the next upcoming 5-minute interval, in c/kWh. The `forecast` attribute is a list covering the next 24 hours, one entry per 5-minute interval, and each entry includes every field the Localvolts API returns for that interval - not just earningsFlexUp/costsFlexUp, but demand, import/export, emissions and quality data too. `forecastcount` gives the total number of entries in the list. One entry, shown in full, looks like this:
+**Unavailable means "don't act".** A price belongs to one 5-minute interval, and the next can be very different, so the sensors go `unavailable` 90 seconds after an interval ends without a fresh price rather than show a stale one. It's brief and rare. Gate automations on `{{ has_value('sensor.costsflexup') }}` instead of substituting a number. If it lasts more than five minutes the log says why - [what the message means](docs/details.md#when-prices-stop-arriving).
 
-```
-forecast:
-  - NMI: '4103326458'
-    intervalDuration: '5'
-    intervalDurationUnits: minutes
-    intervalEnd: '2026-08-19T06:40:00Z'
-    exportsAll: 0
-    exportsAllUnits: kWh
-    importsAll: 0.235
-    importsAllUnits: kWh
-    demandMain: 1.41
-    demandMainUnits: kW
-    demandPeriod: 30
-    demandPeriodUnits: minutes
-    demandInterval: 1
-    earningsAll: 0
-    earningsAllUnits: cents
-    earningsAllVar: 0
-    earningsAllVarUnits: cents
-    earningsAllFixed: 0
-    earningsAllFixedUnits: cents
-    earningsAllVarRate: N/A
-    earningsAllVarRateUnits: c/kWh
-    earningsFlexUp: 7.48652
-    earningsFlexDown: -7.48651605
-    earningsFlexUnits: c/kWh
-    costsAll: 3.54601201
-    costsAllUnits: cents
-    costsAllVar: 2.96613215
-    costsAllVarUnits: cents
-    costsAllFixed: 0.57987986
-    costsAllFixedUnits: cents
-    costsDemandMain: 39.485
-    costsDemandMainUnits: c/kW/Day
-    costsDemandRate: 39.485
-    costsDemandRateUnits: c/kW/Day
-    costsAllVarRate: '12.62183895'
-    costsAllVarRateUnits: c/kWh
-    costsFlexUp: 12.62184
-    costsFlexDown: -12.62183895
-    costsFlexUnits: c/kWh
-    exportsAllEmissions: 0
-    exportsAllEmissionsUnits: g-CO2e
-    importsAllEmissions: 166.427
-    importsAllEmissionsUnits: g-CO2e
-    exportsAllZeroEE: 1
-    exportsAllZeroEEUnits: '%'
-    importsAllZeroEE: '0.21490000'
-    importsAllZeroEEUnits: '%'
-    quality: Fcst
-    lastUpdate: '2026-08-19 06:31:44'
-    duration: 5
-    start_time: '2026-08-19T06:35:00+00:00'
-    end_time: '2026-08-19T06:40:00+00:00'
-  # ...286 more entries, same shape, one per 5-minute interval out to 24 hours
+**Prices are in $/kWh; the forecast is in c/kWh.** Comparing them in a template needs a factor of 100: `forecast / 100 < current`. The forecast keeps the API's unit because changing it would break every automation already reading it.
 
-  forecastcount: 287
-  unit_of_measurement: c/kWh
-  state_class: measurement
-  friendly_name: Forecasted Costs Flex Up
-```
+**Demand flex is a cost per kW, not per kWh.** On a demand tariff you pay for the month's peak average demand inside a demand window. `Demand flex up` is Localvolts' estimate of what one more kW now would add to that charge: 0 outside the window or in a month the tariff doesn't track, rising as the month's peak comes within reach. Zero is a real reading. The peak it works from is as settled so far - your meter data reaches Localvolts the next morning - so treat it as the running target to stay under. To compare it with the energy price, the two combine as `costsFlexUp + 0.12 × flexDemandUp` in $/kWh for a single interval - [why, and a template](docs/examples.md#the-true-cost-of-one-more-kilowatt). On a tariff with no demand component it stays at 0.
 
-6) **Demand flex up** (`sensor.localvolts_<nmi>_demand_flex_up`) is what one
-more unit of demand would cost you right now, for the main load circuit, in
-the unit your network bills demand in (`c/kW/Day` for most, `$/kW/Month` for
-some). Demand tariffs charge for the month's peak average demand inside a
-demand window, so this reads **0** whenever extra load carries no demand
-charge - outside the window, or in a month the tariff doesn't track - and
-rises as the month's peak comes within reach. Zero is a real reading, not
-"unknown". `flexDemandDown`, `maxDemand` and the interval it applies to are
-attributes. It goes unavailable with the price sensors. If your tariff has
-no demand component it simply stays at 0.
+## Keeping the record straight
 
-   One thing to know: the peak it works from is retrospective. Your meter
-   data reaches Localvolts from the metering provider the following morning,
-   so `maxDemand` is the month's peak *as settled so far*, not including
-   today. Treat it as the running target to stay under rather than a live
-   reading of where you are against it right now.
+**Gaps in your statistics are repaired.** If a price arrives late - Home Assistant restarting, your network dropping, a Localvolts stall - Home Assistant's hourly statistic for that hour is built from a carried-forward price and looks fine when it isn't. Localvolts keep 72 hours of history, so the integration checks its own history on startup and hourly, and rewrites any hour that received fewer than twelve intervals from the real published prices. Only the two price sensors' long-term statistics are touched; the History graph still shows the gap as it happened; nothing is ever invented. [How it decides](docs/details.md#filling-gaps-in-the-statistics).
 
-7) **Site facts** - four diagnostic sensors, from Localvolts' metadata API,
-shown on the device page rather than among the prices:
-   - **Import tariff** (`sensor.localvolts_<nmi>_import_tariff`), the tariff
-     you pay on, e.g. `EA116`;
-   - **Export tariff** (`..._export_tariff`), the tariff you're paid on, e.g.
-     `GGENR2` - only created for sites with an export circuit;
-   - **Network** (`..._network`), your poles-and-wires company, e.g. `Ausgrid`;
-   - **Site** (`..._site`), your NEM region, with the rest as attributes:
-     jurisdiction, meter data provider, read type, the date you joined, DLF
-     and TNI codes, and every metered circuit with its tariff.
+## Examples
 
-   They refresh once a day. If the metadata call fails they show unavailable;
-   the price sensors are unaffected.
+- [Knowing when a demand window is open](docs/examples.md#knowing-when-a-demand-window-is-open)
+- [The true cost of one more kilowatt](docs/examples.md#the-true-cost-of-one-more-kilowatt)
+- [Being told when prices stop arriving](docs/examples.md#being-told-when-prices-stop-arriving)
+- [Highest cost and earnings in the next 24 hours](docs/examples.md#highest-cost-and-earnings-in-the-next-24-hours)
 
-**A note on the recorder:** `forecasted_costs_flex_up`'s `forecast` attribute covers ~287 intervals, each with ~40 fields - comfortably over Home Assistant's roughly 16KB limit for stored state attributes. As of v0.7.4, this is handled automatically: the integration tells the recorder to skip just that one oversized attribute, so you won't see the warnings and there's nothing to configure yourself. The sensor's price value still records and shows history/statistics normally - only the large rolling forecast list itself is excluded.
-
-If you added a `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` in an earlier version, you can remove it - keeping it would now also block that price history from recording, which is no longer necessary.
-
-# Filling gaps in the price statistics
-
-Home Assistant builds an hourly statistic for each price sensor from the twelve
-5-minute windows in the hour. If a price arrives late - because Home Assistant
-was restarting, or the network dropped, or the Localvolts API stalled - the
-window is still written, using the previous interval's price carried forward.
-The hour then looks complete and holds a value that was never published.
-
-Localvolts serves the previous 72 hours of intervals on request, and the late
-records usually turn up eventually. So from v0.9.0 the integration checks its
-own history on startup and once an hour, and where it finds an hour that
-received fewer than twelve intervals it fetches that window, recomputes the
-hour from the real published prices, and writes it over the top.
-
-What you need to know:
-
-- **Only `costs_flex_up` and `earnings_flex_up` are repaired.** Prices are
-  authoritative within the 72-hour window. Consumption and cost figures are
-  estimates until Localvolts' metering partner delivers the next day, so they
-  are deliberately left alone.
-- **Historical statistics can change, in either direction.** A repaired hour's
-  average may go up as well as down, depending on which way prices were moving
-  across the gap. This is the correction, not a fault.
-- **Long-term statistics are repaired; the History graph is not.** Home
-  Assistant has an import API for statistics and none for states, so the
-  5-minute trace in History still shows the gap as it happened. The hourly
-  statistics - the ones that are never purged - become correct.
-- **Nothing is invented.** Every value written came from the API. If Localvolts
-  never published the interval either, the existing hour is already the best
-  record that exists and is left untouched.
-- **72 hours is the limit.** A gap older than that when it is found is
-  permanent. Gaps are normally found within an hour of happening.
-
-There is nothing to configure, and no action to take if you would rather it
-did not run - though if the recorder is disabled, it does nothing at all.
-
-# When the sensors go unavailable
-
-A Localvolts price belongs to one 5-minute interval, and the next interval's price can be very different - the NEM moves fast enough that acting on an expired price costs real money. So rather than keep showing a price after the interval it belongs to has ended, the sensors report `unavailable` once no fresh interval has arrived for 90 seconds.
-
-Expect that briefly about once a day, most often early in the morning, when Localvolts publishes late. The sensors come back as soon as the data does, usually within seconds. Before v0.8.0 the integration held a price for 15 minutes - three whole intervals - before giving up on it.
-
-If it lasts longer than five minutes, the integration writes a warning to the log saying how long it has been and what the API is actually returning:
-
-```
-No fresh interval data for 18m12s (newest intervalEnd 2026-10-04T23:05:00+00:00);
-last response 12s ago: 288 records (fcst=288), newest settled intervalEnd none
-```
-
-That line distinguishes the two ways this can fail. `fcst=288, exp=0` with a recent response means Localvolts is answering normally but has stopped publishing settled intervals - nothing is wrong at your end, and it has been observed lasting the better part of an hour. A much older "last response" means requests aren't getting through at all, which is usually your own network or DNS. A second warning is logged when the data resumes, with the length of the gap.
-
-**For your automations:** treat `unavailable` as "don't act", not as a number. There's a worked pair of notification automations under [Knowing when prices stop arriving](#knowing-when-prices-stop-arriving). Gate on availability rather than substituting a value: put a `{{ has_value('sensor.costsflexup') }}` condition on the automation, or an `availability:` template on any template sensor built from it, so it holds off until a real price arrives.
-
----
-
-# Examples
-
-## Knowing when a demand tariff applies
-
-Use the following code in your configuration.yaml to access the attribute for 'DemandInterval' (reflecting whether the current 5-minute interval is within the time window for a Demand Tariff to be active).
-
-```
-template:
-  - binary_sensor:
-      - name: "In Demand Interval"
-        unique_id: "demand_interval"
-        state: >
-          {{ state_attr('sensor.intervalend', 'demandInterval') | int == 1 }}
-        icon: mdi:clock
-```
-
-## Knowing when prices stop arriving
-
-The sensors going unavailable is itself the signal that no fresh interval has arrived, so a pair of automations can tell you about an outage while it's happening rather than the next morning. Replace `notify.mobile_app_your_phone` with your own notify service.
-
-```yaml
-automation:
-  - alias: NOTIFY Localvolts prices stalled
-    description: costsflexup has been unavailable for 5 minutes, meaning no settled interval has arrived
-    triggers:
-      - trigger: state
-        entity_id: sensor.costsflexup
-        to: unavailable
-        for: "00:05:00"
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          message: >-
-            Localvolts prices stalled: no settled interval since
-            {{ (as_timestamp(trigger.to_state.last_changed) - 90) | timestamp_custom('%H:%M', true) }},
-            about {{ ((as_timestamp(now()) - as_timestamp(trigger.to_state.last_changed) + 90) / 60) | round | int }}
-            minutes ago. The integration logs the detail as a warning.
-    mode: single
-
-  - alias: NOTIFY Localvolts prices recovered
-    description: costsflexup is available again after an outage long enough to have alerted
-    triggers:
-      - trigger: state
-        entity_id: sensor.costsflexup
-        from: unavailable
-    conditions:
-      - condition: template
-        value_template: >-
-          {{ trigger.to_state.state not in ['unknown', 'unavailable']
-             and (as_timestamp(trigger.to_state.last_changed)
-                  - as_timestamp(trigger.from_state.last_changed)) >= 300 }}
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          message: >-
-            {% set out = as_timestamp(trigger.to_state.last_changed) - as_timestamp(trigger.from_state.last_changed) %}
-            {%- set gap = out + 90 %}
-            Localvolts prices are back at {{ trigger.to_state.state }} $/kWh.
-            Unavailable for {{ (out / 60) | round(1) }} minutes; no settled interval for
-            {{ (gap / 60) | round(1) }} minutes, since
-            {{ (as_timestamp(trigger.from_state.last_changed) - 90) | timestamp_custom('%H:%M', true) }}.
-    mode: single
-```
-
-The five-minute windows matter. Localvolts is routinely a little late - about once a day it takes more than 90 seconds, so the sensors blink unavailable briefly - and neither automation fires for those. The first only triggers after five continuous minutes, and the second only reports a recovery from an outage that lasted at least that long, so routine lateness stays off your phone.
-
-The recovery message gives both numbers because they differ: the time the sensors were unavailable, and the total time without a settled interval, which is 90 seconds longer. On a real outage on 6 October 2026 they read:
-
-```
-Localvolts prices stalled: no settled interval since 05:30, about 6 minutes ago.
-The integration logs the detail as a warning.
-
-Localvolts prices are back at 0.375 $/kWh. Unavailable for 30.5 minutes;
-no settled interval for 32.0 minutes, since 05:30.
-```
-
-One caveat: the recovery automation triggers on any change out of `unavailable`, which includes Home Assistant itself restarting. If yours is ever down for more than five minutes you'll get a recovery notification when it comes back, with the downtime as the duration.
-
-## Highest cost and earnings in the next 24 hours
-
-The forecast list is also handy for looking ahead rather than just at the current interval - for example, working out the highest import cost and export earning you might see over the next 24 hours, and when:
-
-```
-template:
-  - sensor:
-      - name: "Max Forecast Cost Flex Up"
-        unique_id: "max_forecast_cost_flex_up"
-        unit_of_measurement: "c/kWh"
-        state: >
-          {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
-          {{ (forecast | map(attribute='costsFlexUp') | max | round(3)) if forecast else 0 }}
-        attributes:
-          at: >
-            {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
-            {{ (forecast | sort(attribute='costsFlexUp') | last).start_time if forecast else None }}
-
-      - name: "Max Forecast Earnings Flex Up"
-        unique_id: "max_forecast_earnings_flex_up"
-        unit_of_measurement: "c/kWh"
-        state: >
-          {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
-          {{ (forecast | map(attribute='earningsFlexUp') | max | round(3)) if forecast else 0 }}
-        attributes:
-          at: >
-            {% set forecast = state_attr('sensor.forecasted_costs_flex_up', 'forecast') %}
-            {{ (forecast | sort(attribute='earningsFlexUp') | last).start_time if forecast else None }}
-```
-
-## Charting settled prices alongside the forecast
+### Charting settled prices alongside the forecast
 
 ![The settled price and the forecast either side of a "now" marker](assets/apexcharts-example.png)
 
-With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (available in HACS) you can plot the settled price you actually paid alongside the forecast on a single chart - the last 24 hours to the left of a "now" marker, the next 24 hours to the right.
+With the [ApexCharts Card](https://github.com/RomRider/apexcharts-card) (in HACS) you can plot the price you actually paid alongside the forecast on one chart - the last 24 hours left of a "now" marker, the next 24 to the right.
 
 ```yaml
 type: custom:apexcharts-card
@@ -418,8 +102,7 @@ apex_config:
   yaxis:
     decimalsInFloat: 2
 series:
-  # Settled price, taken as the raw unrounded attribute so it keeps full
-  # precision. Already in c/kWh, so no transform is needed.
+  # Settled price, from the raw attribute: full precision and already c/kWh.
   - entity: sensor.intervalend
     attribute: costsFlexUp
     name: Actual
@@ -431,7 +114,6 @@ series:
     extend_to: now
     float_precision: 3
     show:
-      # Already shown in the header - the legend would just repeat it.
       legend_value: false
   - entity: sensor.forecasted_costs_flex_up
     name: Forecast
@@ -443,8 +125,6 @@ series:
     extend_to: false
     float_precision: 3
     show:
-      # Header shows the forecast for the next interval. The legend can
-      # only show the last point, ~24h out, so it's hidden there.
       in_header: after_now
       legend_value: false
       extremas: true
@@ -454,18 +134,11 @@ series:
       });
 ```
 
-A few things worth knowing about how this works:
+Three things that matter in that config: don't add `update_interval` (the card then redraws on its own timer and the header lags the real price); keep the `|| []` (when the sensor is unavailable its attributes vanish, and without the fallback the card errors instead of drawing an empty line); and the "Actual" series reads the raw `costsFlexUp` attribute of `sensor.intervalend` because it is in c/kWh like the forecast, where `sensor.costsflexup` is $/kWh rounded to three places.
 
-- The header shows two prices: **Actual** is the current settled price, and **Forecast** is the forecast for the next interval (`in_header: after_now`). The legend below the chart only names the series. The card always takes the legend value from the last point of a series, which for the forecast is the price about 24 hours out, so both legend values are hidden with `legend_value: false`.
-- Don't add `update_interval` to the card. Without it the card redraws whenever a new interval arrives. With it, the card redraws on its own timer instead, so the header can keep showing the previous interval's price for several minutes after `sensor.costsflexup` has moved on.
-- The `|| []` in the `data_generator` matters. If the sensor is unavailable - during a restart, before the first fetch, or if the integration has flagged the data as out of date - Home Assistant drops its attributes, and `entity.attributes.forecast` is then undefined. Without the fallback the card throws an error and renders nothing instead of just showing an empty forecast line.
-- The excluded `forecast` attribute (see the recorder note above) doesn't affect this. That exclusion applies only to the forecast sensor's own oversized list; `sensor.intervalend`'s attributes are recorded normally, and the forecast line is built from the sensor's *live* state rather than from history.
-- The "Actual" series uses `sensor.intervalend`'s `costsFlexUp` attribute rather than `sensor.costsflexup` because the attribute is the raw API value in `c/kWh`, matching the forecast's units exactly. `sensor.costsflexup` would work too, but it is published in `$/kWh` rounded to three decimals, so it needs `transform: "return x * 100;"` and lands on 0.1 c/kWh steps. Either is fine visually - the difference is under 0.05 c/kWh.
-- Attribute history only exists from the point those attributes started being recorded, so on a fresh install the "Actual" line may not reach a full 24 hours back at first. It fills in as history accumulates.
+### Feeding forecasts into EMHASS
 
-## Feeding forecasts into EMHASS
-
-If you use [EMHASS](https://github.com/davidusb-geek/emhass) (Energy Management for Home Assistant) for battery/solar optimisation, it accepts price forecasts as a `{timestamp: price}` dict via its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters - see the [EMHASS forecast docs](https://emhass.readthedocs.io/en/latest/forecasts.html). Everything it needs is already in `sensor.forecasted_costs_flex_up`'s `forecast` attribute; this template just reshapes it. Use it wherever you call EMHASS's API (a `rest_command`, automation, or pyscript action) - adjust the `/ 100` scaling to whatever currency/kWh unit your EMHASS setup is configured for:
+[EMHASS](https://github.com/davidusb-geek/emhass) accepts price forecasts as a `{timestamp: price}` dict through its `load_cost_forecast` (import) and `prod_price_forecast` (export) parameters ([docs](https://emhass.readthedocs.io/en/latest/forecasts.html)). Everything it needs is in the `forecast` attribute; this template reshapes it. Adjust the `/ 100` to whatever unit your EMHASS is configured in.
 
 ```yaml
 template:
@@ -488,12 +161,10 @@ template:
             {{ ns.price }}
 ```
 
+## Removing
+
+Settings → Devices & Services → Localvolts → three dots → **Delete**, then in HACS → Localvolts → **Remove**, then restart. Re-adding within 30 days brings back the same entity IDs and history; after that, Home Assistant generates new IDs ([details](docs/details.md#entity-ids)).
+
 ---
 
-# Removing the integration
-
-1. Go to Settings → Devices & Services → Localvolts, click the three dots, and select "Delete". This removes the config entry and its sensors.
-2. In HACS, go to Integrations → Localvolts, click the three dots, and select "Remove" to delete the integration's files too.
-3. Restart Home Assistant.
-
-If you have an old `recorder: exclude:` entry for `sensor.forecasted_costs_flex_up` from before v0.7.4, remove that too since the entity will no longer exist. If you installed by copying files in manually at some point in the past, delete the `custom_components/localvolts` folder from your Home Assistant config directory.
+More depth, when you want it: [docs/details.md](docs/details.md) covers the full forecast record, the outage log message, entity IDs and history, and exactly how the statistics repair decides what to rewrite.
