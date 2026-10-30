@@ -58,6 +58,7 @@ async def async_setup_entry(
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
             LocalvoltsForecastCostsSensor(coordinator),
+            LocalvoltsDemandFlexUpSensor(coordinator),
             LocalvoltsImportTariffSensor(coordinator),
             LocalvoltsNetworkSensor(coordinator),
             LocalvoltsSiteSensor(coordinator),
@@ -294,6 +295,53 @@ class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
             attributes["forecastcount"] = len(forecast)
 
         return attributes
+
+
+class LocalvoltsDemandFlexUpSensor(LocalvoltsEntity):
+    """What one more unit of demand would cost right now, on the main load.
+
+    Zero means extra load now carries no demand charge - outside a demand
+    window, or in a month the tariff doesn't track - and is a real reading,
+    not an unknown. The unit is whatever the network bills in (c/kW/Day for
+    most, $/kW/Month for some), taken from the API rather than assumed.
+    Goes unavailable with the prices: it describes the interval in progress.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Demand flex up"
+    _attr_icon = "mdi:gauge"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.nmi_id}_demand_flex_up"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.demand is not None
+
+    @property
+    def native_unit_of_measurement(self):
+        demand = self.coordinator.demand
+        return demand.units if demand else None
+
+    @property
+    def native_value(self):
+        demand = self.coordinator.demand
+        return demand.flex_up if demand else None
+
+    @property
+    def extra_state_attributes(self):
+        demand = self.coordinator.demand
+        if not demand:
+            return {}
+        return {
+            "flexDemandDown": demand.flex_down,
+            "maxDemand": demand.max_demand,
+            "demandUnits": demand.demand_units,
+            "intervalEnd": demand.interval_end.isoformat(),
+            "quality": demand.quality,
+        }
 
 
 class LocalvoltsSiteEntity(LocalvoltsEntity):

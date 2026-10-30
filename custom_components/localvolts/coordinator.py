@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .demand import DemandFlex, parse_demand
 from .metadata import SiteInfo, parse_metadata
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +26,12 @@ API_BASE_URL = "https://api.localvolts.com/v1/customer/interval"
 # The one v2 call: what Localvolts know about the site. Interval polling
 # stays on v1, which remains supported; this is optional and never fatal.
 METADATA_URL = "https://api.localvolts.com/v2/customer/metadata"
+# Demand flex lives only in v2's per-circuit interval records. One call per
+# new interval, for the current interval only, after v1 has delivered it.
+V2_INTERVAL_URL = "https://api.localvolts.com/v2/customer/interval"
+# Shorter than the main poll's: this runs inside it, after the price has
+# already been applied, and must not hold the schedule hostage.
+DEMAND_TIMEOUT = aiohttp.ClientTimeout(total=10)
 API_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 USER_AGENT_TEMPLATE = "ha-localvolts/{version} (+https://github.com/gurrier/localvolts)"
 
@@ -286,6 +293,10 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         # listener key, so a changed tariff reaches the site sensor.
         self.site: SiteInfo | None = None
         self._site_version: int = 0
+        # The import circuit's demand flex for the interval in hand, from the
+        # v2 call. None until the first one succeeds; kept across a failed
+        # refresh, with its own intervalEnd so staleness is visible.
+        self.demand: DemandFlex | None = None
 
         super().__init__(
             hass,
@@ -444,6 +455,39 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Site metadata: %s", site.as_attributes())
             self.async_update_listeners()
         return True
+
+    async def _refresh_demand(self) -> None:
+        """Fetch the current interval's demand flex from v2. Never raises.
+
+        Called once per new interval, after v1 has delivered the price. If
+        v2 is a beat behind and still describes the previous interval, the
+        value is kept as it was and the next interval's poll tries again;
+        the sensor's intervalEnd attribute shows which interval it is for.
+        """
+        url = f"{V2_INTERVAL_URL}?NMI={self.nmi_id}&from=current&to=current"
+        headers = _auth_headers(self.api_key, self.partner_id, self.user_agent)
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, headers=headers, timeout=DEMAND_TIMEOUT) as response:
+                response.raise_for_status()
+                payload = await response.json()
+        except (TimeoutError, aiohttp.ClientError, ValueError) as err:
+            _LOGGER.debug("Couldn't fetch demand flex: %s", err)
+            return
+        if (error := api_error(payload)) is not None:
+            _LOGGER.debug("Demand flex request refused: %s", error)
+            return
+        demand = parse_demand(payload)
+        if demand is None:
+            _LOGGER.debug("No settled Import record in the v2 response")
+            return
+        if self.demand is not None and demand.interval_end < self.demand.interval_end:
+            return
+        self.demand = demand
+        _LOGGER.debug(
+            "Demand flex for %s: up=%s down=%s %s",
+            demand.interval_end, demand.flex_up, demand.flex_down, demand.units,
+        )
 
     def _next_update_interval(self, now: datetime.datetime) -> datetime.timedelta:
         """Work out how long to wait before the next poll.
@@ -691,6 +735,10 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
                     self.intervalEnd,
                     self.lastUpdate,
                 )
+                # The price for this interval is in hand; now its demand
+                # flex, unless the v2 record for it is already held.
+                if self.demand is None or self.demand.interval_end != interval_end:
+                    await self._refresh_demand()
         else:
             _LOGGER.debug("Data did not change. Still in the same interval.")
 

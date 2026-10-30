@@ -143,6 +143,7 @@ def _load(name: str):
 
 
 M = _load("metadata")
+DM = _load("demand")
 C = _load("coordinator")
 B = _load("backfill")
 
@@ -179,19 +180,28 @@ class _BadJson(_Response):
 
 
 class _Session:
-    def __init__(self, payload):
+    def __init__(self, payload, v2=None):
         self._payload = payload
+        self._v2 = v2
+        self.v2_calls = 0
 
     def get(self, url, headers=None, timeout=None):
-        if self._payload is _BadJson:
+        if "/v2/customer/interval" in url:
+            self.v2_calls += 1
+            payload = self._v2 if self._v2 is not None else []
+        else:
+            payload = self._payload
+        if payload is _BadJson:
             return _BadJson(None)
-        return _Response(self._payload)
+        return _Response(payload)
 
 
-def serving(payload):
-    """A coordinator whose next fetch returns `payload`."""
+def serving(payload, v2=None):
+    """A coordinator whose next fetch returns `payload` (and `v2` for v2 calls)."""
     c = make()
-    C.async_get_clientsession = lambda hass: _Session(payload)
+    session = _Session(payload, v2)
+    C.async_get_clientsession = lambda hass: session
+    c._test_session = session
     return c
 
 
@@ -878,6 +888,67 @@ def test_a_failed_site_refresh_keeps_what_it_had():
     c2.site = c.site
     assert asyncio.run(c2.async_refresh_site()) is True, "a bad answer later doesn't erase a good one"
     assert c2.site.model == "Ausgrid EA116"
+
+
+# --- demand flex -----------------------------------------------------------
+def v2_rows(end_offset_min: int = 0, quality: str = "Exp", flex_up: float = 0.0, **over):
+    """A v2 current-interval response: one Export row and one Import row."""
+    end = (BASE + td(minutes=end_offset_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    imp = {"circuit": "Import", "register": "E1", "direction": "Buy", "intervalEnd": end,
+           "quality": quality, "flexUp": 10.0, "flexDemandUp": flex_up, "flexDemandDown": -flex_up,
+           "flexDemandUnits": "c/kW/Day", "maxDemand": 2.4, "demandUnits": "kW"}
+    imp.update(over)
+    exp = {"circuit": "Export", "register": "B1", "direction": "Sell", "intervalEnd": end,
+           "quality": quality, "flexUp": 5.0, "flexDemandUp": 0, "flexDemandUnits": "c/kW/Day"}
+    return [exp, imp]
+
+
+def test_demand_flex_comes_from_the_import_circuits_settled_record():
+    d = DM.parse_demand(v2_rows(flex_up=12.5))
+    assert d.flex_up == 12.5 and d.flex_down == -12.5 and d.units == "c/kW/Day"
+    assert d.max_demand == 2.4 and d.demand_units == "kW" and d.quality == "Exp"
+    assert d.interval_end == BASE
+    zero = DM.parse_demand(v2_rows(flex_up=0))
+    assert zero is not None and zero.flex_up == 0.0, "zero is a reading, not an absence"
+
+
+def test_demand_flex_refuses_what_it_should():
+    assert DM.parse_demand(v2_rows(quality="Fcst")) is None, "a forecast is not the number yet"
+    assert DM.parse_demand([v2_rows()[0]]) is None, "no Import circuit, no demand"
+    assert DM.parse_demand([{"error": "nope"}]) is None
+    assert DM.parse_demand({"circuit": "Import"}) is None
+    assert DM.parse_demand(v2_rows(flexDemandUp=None)) is None, "missing field, no record"
+    newest = DM.parse_demand(v2_rows(0, flex_up=1.0) + v2_rows(5, flex_up=2.0))
+    assert newest.flex_up == 2.0, "the newest interval wins, whatever the order"
+
+
+def test_demand_flex_is_fetched_once_per_new_interval():
+    c = serving([record(0, price=0.20)], v2=v2_rows(0, flex_up=3.0))
+    asyncio.run(c._fetch_update_data())
+    assert c.demand.flex_up == 3.0 and c.demand.interval_end == BASE
+    assert c._test_session.v2_calls == 1
+    # a repeat poll that finds the same interval (a republish) does not ask again
+    c.intervalEnd = BASE - td(minutes=5)   # force a fetch of the same record
+    asyncio.run(c._fetch_update_data())
+    assert c._test_session.v2_calls == 1, "already held for this interval"
+
+
+def test_a_failed_demand_fetch_keeps_the_last_value_and_the_price():
+    c = serving([record(0, price=0.20)], v2=v2_rows(0, flex_up=3.0))
+    asyncio.run(c._fetch_update_data())
+    c2 = serving([record(5, price=0.30)], v2=_BadJson)
+    c2.demand = c.demand
+    c2.intervalEnd = BASE
+    asyncio.run(c2._fetch_update_data())
+    assert c2.interval_data["costsFlexUp"] == 0.30, "the price must not depend on v2"
+    assert c2.demand.flex_up == 3.0 and c2.demand.interval_end == BASE, "the old reading stays, dated"
+    c3 = serving([record(10, price=0.40)], v2=v2_rows(5, flex_up=9.0))  # v2 a beat behind
+    c3.demand = c2.demand
+    c3.intervalEnd = BASE  # already past, so the poll fetches
+    asyncio.run(c3._fetch_update_data())
+    assert c3.demand.interval_end == BASE + td(minutes=5) and c3.demand.flex_up == 9.0, (
+        "a newer record than held is taken even if not the newest interval"
+    )
 
 
 # --- runner, so this works without pytest ----------------------------------

@@ -170,7 +170,18 @@ forecast:
   friendly_name: Forecasted Costs Flex Up
 ```
 
-6) **Site facts** - four diagnostic sensors, from Localvolts' metadata API,
+6) **Demand flex up** (`sensor.localvolts_<nmi>_demand_flex_up`) is what one
+more unit of demand would cost you right now, for the main load circuit, in
+the unit your network bills demand in (`c/kW/Day` for most, `$/kW/Month` for
+some). Demand tariffs charge for the month's peak average demand inside a
+demand window, so this reads **0** whenever extra load carries no demand
+charge - outside the window, or in a month the tariff doesn't track - and
+rises as current demand approaches the month's peak. Zero is a real reading,
+not "unknown". `flexDemandDown`, `maxDemand` and the interval it applies to
+are attributes. It goes unavailable with the price sensors. If your tariff
+has no demand component it simply stays at 0.
+
+7) **Site facts** - four diagnostic sensors, from Localvolts' metadata API,
 shown on the device page rather than among the prices:
    - **Import tariff** (`sensor.localvolts_<nmi>_import_tariff`), the tariff
      you pay on, e.g. `EA116`;

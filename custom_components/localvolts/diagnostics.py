@@ -71,6 +71,19 @@ async def async_get_config_entry_diagnostics(
         # already put to the API (and how many intervals each came back
         # with), and what the last sweep concluded. "nothing to repair" on
         # a healthy install is the expected answer.
+        "demand": (
+            {
+                "interval_end": coordinator.demand.interval_end.isoformat(),
+                "quality": coordinator.demand.quality,
+                "flex_up": coordinator.demand.flex_up,
+                "flex_down": coordinator.demand.flex_down,
+                "units": coordinator.demand.units,
+                "max_demand": coordinator.demand.max_demand,
+                "demand_units": coordinator.demand.demand_units,
+            }
+            if coordinator.demand
+            else None
+        ),
         "site": (
             async_redact_data(coordinator.site.as_attributes(), SITE_REDACT)
             if coordinator.site
