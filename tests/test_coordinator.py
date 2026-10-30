@@ -142,6 +142,7 @@ def _load(name: str):
     return module
 
 
+M = _load("metadata")
 C = _load("coordinator")
 B = _load("backfill")
 
@@ -813,6 +814,66 @@ def test_repairs_outside_the_window_are_forgotten():
     remembered = asyncio.run(repair._load_done(start))
     assert stale not in remembered, "an hour the API no longer serves is dead weight"
     assert fresh in remembered
+
+
+# --- site metadata ---------------------------------------------------------
+SITE_RECORDS = [
+    {"NMI": "4100000000", "Region": "NSW", "Circuit": "Export", "Suffix": "B1", "Jurisdiction": "NSW",
+     "LNSP": "Ausgrid", "DLF": "JL40", "TNI": "NSE2", "Tariff": "GGENR2",
+     "MDP": "Active Stream Pty Ltd", "ReadType": "Remote Interval", "LastJoin": "2025-03-13"},
+    {"NMI": "4100000000", "Region": "NSW", "Circuit": "Import", "Suffix": "E1", "Jurisdiction": "NSW",
+     "LNSP": "Ausgrid", "DLF": "JL40", "TNI": "NSE2", "Tariff": "EA116",
+     "MDP": "Active Stream Pty Ltd", "ReadType": "Remote Interval", "LastJoin": "2025-03-13"},
+]
+
+
+def test_site_metadata_is_read_per_circuit():
+    """The real shape: one record per circuit, site facts repeated on each."""
+    site = M.parse_metadata(SITE_RECORDS)
+    assert site.lnsp == "Ausgrid" and site.region == "NSW" and site.joined == "2025-03-13"
+    assert [c.circuit for c in site.circuits] == ["Export", "Import"]
+    assert site.import_tariff == "EA116", "the Import circuit wins even when listed second"
+    assert site.model == "Ausgrid EA116"
+    attrs = site.as_attributes()
+    assert attrs["network"] == "Ausgrid"
+    assert attrs["circuits"][1] == {"circuit": "Import", "suffix": "E1", "tariff": "EA116"}
+    assert "NMI" not in attrs and "4100000000" not in str(attrs), "the NMI stays out of attributes"
+
+
+def test_site_metadata_tolerates_what_the_api_might_send():
+    assert M.parse_metadata([{"error": "Unregistered partner: 1"}]) is None, "an error object is not a site"
+    assert M.parse_metadata({"Region": "NSW"}) is None, "nor is a bare object"
+    assert M.parse_metadata([]) is None
+    only_export = M.parse_metadata([SITE_RECORDS[0]])
+    assert only_export.import_tariff == "GGENR2", "with no Import circuit the first one stands in"
+    blanks = M.parse_metadata([{"Circuit": "Import", "Tariff": "  ", "LNSP": None}])
+    assert blanks.import_tariff is None and blanks.model is None, "blank fields are None, not ''"
+
+
+def test_a_site_refresh_notifies_once_and_only_on_change():
+    c = serving(SITE_RECORDS)
+    assert asyncio.run(c.async_refresh_site()) is True
+    assert c.site.model == "Ausgrid EA116"
+    assert c.notified == 1, "the site sensor must be told"
+    assert asyncio.run(c.async_refresh_site()) is True
+    assert c.notified == 1, "an identical answer is not news"
+    changed = [dict(r, Tariff="EA225") for r in SITE_RECORDS]
+    c2 = serving(changed)
+    c2.site, c2._site_version, c2.notified = c.site, c._site_version, 0
+    asyncio.run(c2.async_refresh_site())
+    assert c2.site.import_tariff == "EA225" and c2.notified == 1, "a new tariff is"
+
+
+def test_a_failed_site_refresh_keeps_what_it_had():
+    c = serving([{"error": "nope"}])
+    assert asyncio.run(c.async_refresh_site()) is False, "nothing known yet"
+    assert c.site is None
+    c = serving(SITE_RECORDS)
+    asyncio.run(c.async_refresh_site())
+    c2 = serving(_BadJson)
+    c2.site = c.site
+    assert asyncio.run(c2.async_refresh_site()) is True, "a bad answer later doesn't erase a good one"
+    assert c2.site.model == "Ausgrid EA116"
 
 
 # --- runner, so this works without pytest ----------------------------------

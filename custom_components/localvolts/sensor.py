@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -57,6 +58,7 @@ async def async_setup_entry(
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
             LocalvoltsForecastCostsSensor(coordinator),
+            LocalvoltsSiteSensor(coordinator),
         ]
     )
 
@@ -74,6 +76,8 @@ class LocalvoltsEntity(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, coordinator.nmi_id)},
             name=f"Localvolts {coordinator.nmi_id}",
             manufacturer="Localvolts",
+            # Network and tariff, when the metadata call has answered.
+            model=coordinator.site.model if coordinator.site else None,
             entry_type=DeviceEntryType.SERVICE,
         )
 
@@ -283,3 +287,34 @@ class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
         return attributes
 
 
+class LocalvoltsSiteSensor(LocalvoltsEntity):
+    """What Localvolts know about the site: network, tariff, meter provider.
+
+    The state is the import tariff code, the one fact most likely to matter
+    in an automation; everything else - region, network, meter data
+    provider, per-circuit tariffs - rides along as attributes. Diagnostic,
+    so it sits with the device rather than among the prices.
+    """
+
+    _attr_name = "Localvolts Site"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:transmission-tower"
+
+    def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.nmi_id}_site"
+
+    @property
+    def available(self) -> bool:
+        """Depends on the metadata call having answered, not on price freshness."""
+        return self.coordinator.site is not None
+
+    @property
+    def native_value(self):
+        site = self.coordinator.site
+        return site.import_tariff if site else None
+
+    @property
+    def extra_state_attributes(self):
+        site = self.coordinator.site
+        return site.as_attributes() if site else {}

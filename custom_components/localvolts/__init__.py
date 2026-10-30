@@ -6,12 +6,14 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
 
 from .backfill import StatisticsRepair, async_forget_repairs
 from .coordinator import LocalvoltsDataUpdateCoordinator
+from .metadata import REFRESH_INTERVAL as SITE_REFRESH_INTERVAL
 
 from .const import (
     DOMAIN,
@@ -105,6 +107,23 @@ async def async_setup_entry(hass, config_entry):
     # would leave the integration dead until the user restarts - a real
     # problem when HA starts up before the network is ready.
     await coordinator.async_config_entry_first_refresh()
+
+    # What Localvolts know about the site - network, tariff, meter provider.
+    # Fetched before the sensors are created so the device can carry it as
+    # its model, and refreshed daily in case the tariff changes. Optional:
+    # it never raises, and a site that can't be described still gets prices.
+    await coordinator.async_refresh_site()
+
+    async def _refresh_site(_now) -> None:
+        if await coordinator.async_refresh_site() and coordinator.site:
+            registry = dr.async_get(hass)
+            device = registry.async_get_device(identifiers={(DOMAIN, nmi_id)})
+            if device and device.model != coordinator.site.model:
+                registry.async_update_device(device.id, model=coordinator.site.model)
+
+    config_entry.async_on_unload(
+        async_track_time_interval(hass, _refresh_site, SITE_REFRESH_INTERVAL)
+    )
 
     # Store on the entry itself rather than a hass.data[DOMAIN] dict keyed by
     # entry_id - besides being the current convention, it rules out the kind

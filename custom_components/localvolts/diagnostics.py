@@ -17,6 +17,10 @@ from .const import CONF_API_KEY, CONF_NMI_ID, CONF_PARTNER_ID
 # the three should travel with them. "NMI" is the API's own spelling of the
 # same value inside interval records.
 TO_REDACT = {CONF_API_KEY, CONF_PARTNER_ID, CONF_NMI_ID, "NMI"}
+# DLF and TNI codes place the site on the network to within a substation
+# area, which is locational enough to keep out of a public thread. Network,
+# region and tariff are shared by whole cities and are what support needs.
+SITE_REDACT = TO_REDACT | {"dlf", "tni"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -67,6 +71,11 @@ async def async_get_config_entry_diagnostics(
         # already put to the API (and how many intervals each came back
         # with), and what the last sweep concluded. "nothing to repair" on
         # a healthy install is the expected answer.
+        "site": (
+            async_redact_data(coordinator.site.as_attributes(), SITE_REDACT)
+            if coordinator.site
+            else None
+        ),
         "statistics_repair": {
             "remembered_hours": repair.remembered,
             "last_sweep": repair.last_sweep,

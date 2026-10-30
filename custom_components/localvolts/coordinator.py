@@ -17,9 +17,14 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .metadata import SiteInfo, parse_metadata
+
 _LOGGER = logging.getLogger(__name__)
 
 API_BASE_URL = "https://api.localvolts.com/v1/customer/interval"
+# The one v2 call: what Localvolts know about the site. Interval polling
+# stays on v1, which remains supported; this is optional and never fatal.
+METADATA_URL = "https://api.localvolts.com/v2/customer/metadata"
 API_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 USER_AGENT_TEMPLATE = "ha-localvolts/{version} (+https://github.com/gurrier/localvolts)"
 
@@ -130,6 +135,15 @@ class LocalvoltsAuthError(Exception):
     """Raised when the API rejects the given API key or partner ID."""
 
 
+def _auth_headers(api_key: str, partner_id: str, user_agent: str) -> dict[str, str]:
+    """The headers every Localvolts call carries."""
+    return {
+        "Authorization": f"apikey {api_key}",
+        "partner": partner_id,
+        "User-Agent": user_agent,
+    }
+
+
 def _build_request(
     nmi_id: str,
     api_key: str,
@@ -149,12 +163,7 @@ def _build_request(
         f"&from={from_time.strftime(API_TIME_FORMAT)}"
         f"&to={to_time.strftime(API_TIME_FORMAT)}"
     )
-    headers = {
-        "Authorization": f"apikey {api_key}",
-        "partner": partner_id,
-        "User-Agent": user_agent,
-    }
-    return url, headers
+    return url, _auth_headers(api_key, partner_id, user_agent)
 
 
 async def async_discover_nmis(hass: HomeAssistant, api_key: str, partner_id: str) -> list[str]:
@@ -271,6 +280,12 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_record_count: int = 0
         self._last_quality_counts: dict[str, int] = {}
         self._last_settled_end: Any = None
+        # What Localvolts know about the site, from the metadata call. None
+        # until fetched, and None for good if the call never succeeds - the
+        # prices don't depend on it. The version counter is part of the
+        # listener key, so a changed tariff reaches the site sensor.
+        self.site: SiteInfo | None = None
+        self._site_version: int = 0
 
         super().__init__(
             hass,
@@ -385,11 +400,50 @@ class LocalvoltsDataUpdateCoordinator(DataUpdateCoordinator):
             len(self.forecast_data),
             self.last_update_success,
             self.data_is_stale,
+            self._site_version,
         )
         if key == self._last_notified_key:
             return
         self._last_notified_key = key
         super().async_update_listeners()
+
+    async def async_refresh_site(self) -> bool:
+        """Fetch the site's metadata; True if we now hold a description of it.
+
+        Never raises: a site description is nice to have, and a failure here
+        must not cost anyone their prices. Failures are logged at debug - the
+        site sensor reporting unavailable is the visible sign.
+        """
+        url = f"{METADATA_URL}?NMI={self.nmi_id}"
+        headers = _auth_headers(self.api_key, self.partner_id, self.user_agent)
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, headers=headers, timeout=DISCOVERY_TIMEOUT) as response:
+                if response.status in (401, 403, 500):
+                    _LOGGER.debug(
+                        "Localvolts metadata refused (HTTP %s): %s",
+                        response.status, (await response.text()).strip(),
+                    )
+                    return self.site is not None
+                response.raise_for_status()
+                payload = await response.json()
+        except (TimeoutError, aiohttp.ClientError, ValueError) as err:
+            _LOGGER.debug("Couldn't fetch Localvolts site metadata: %s", err)
+            return self.site is not None
+
+        if (error := api_error(payload)) is not None:
+            _LOGGER.debug("Localvolts metadata error: %s", error)
+            return self.site is not None
+        site = parse_metadata(payload)
+        if site is None:
+            _LOGGER.debug("Localvolts metadata had no circuits: %r", payload)
+            return self.site is not None
+        if site != self.site:
+            self.site = site
+            self._site_version += 1
+            _LOGGER.debug("Site metadata: %s", site.as_attributes())
+            self.async_update_listeners()
+        return True
 
     def _next_update_interval(self, now: datetime.datetime) -> datetime.timedelta:
         """Work out how long to wait before the next poll.
