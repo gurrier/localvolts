@@ -302,8 +302,8 @@ class LocalvoltsDemandFlexUpSensor(LocalvoltsEntity):
 
     Zero means extra load now carries no demand charge - outside a demand
     window, or in a month the tariff doesn't track - and is a real reading,
-    not an unknown. The unit is whatever the network bills in (c/kW/Day for
-    most, $/kW/Month for some), taken from the API rather than assumed.
+    not an unknown. The unit is whatever the API quotes (c/kW for the sites
+    seen so far) rather than assumed, since networks bill demand differently.
     Goes unavailable with the prices: it describes the interval in progress.
     """
 

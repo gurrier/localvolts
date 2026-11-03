@@ -32,7 +32,7 @@ One device per site, named `Localvolts <NMI>`, showing your network and tariff a
 | **Demand flex up** | What one more kW of demand would add to your demand charge right now. 0 when no demand charge applies | as billed, e.g. c/kW |
 | **IntervalEnd** | When the current interval ends, with every field Localvolts publish for it as attributes | timestamp |
 | **DataLag** | How long after the interval started Localvolts published its price - typically 15-25 s | s |
-| **Import tariff**, **Export tariff**, **Network**, **Site** | What Localvolts know about your site: tariff codes, your distributor, your region, and more as attributes of Site | diagnostic |
+| **Import tariff**, **Export tariff**, **Network**, **Site** | What Localvolts know about your site: tariff codes, your distributor, your region, and more as attributes of Site. Export tariff appears only if your site has an export circuit | diagnostic |
 
 Entity IDs depend on when you installed: long-standing installations have `sensor.costsflexup` and so on, while recent Home Assistant versions give new entities IDs like `sensor.localvolts_<nmi>_costsflexup`. Your IDs are on the device page - substitute them in the examples below. [Details](docs/details.md#entity-ids).
 
