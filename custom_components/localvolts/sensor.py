@@ -58,7 +58,7 @@ async def async_setup_entry(
             LocalvoltsDataLagSensor(coordinator),
             LocalvoltsIntervalEndSensor(coordinator),
             LocalvoltsForecastCostsSensor(coordinator),
-            LocalvoltsDemandFlexUpSensor(coordinator),
+            LocalvoltsMaxDemandSensor(coordinator),
             LocalvoltsImportTariffSensor(coordinator),
             LocalvoltsNetworkSensor(coordinator),
             LocalvoltsSiteSensor(coordinator),
@@ -297,38 +297,47 @@ class LocalvoltsForecastCostsSensor(LocalvoltsEntity):
         return attributes
 
 
-class LocalvoltsDemandFlexUpSensor(LocalvoltsEntity):
-    """What one more unit of demand would cost right now, on the main load.
+class LocalvoltsMaxDemandSensor(LocalvoltsEntity):
+    """The month's peak demand as Localvolts currently hold it - `maxDemand`.
 
-    Zero means extra load now carries no demand charge - outside a demand
-    window, or in a month the tariff doesn't track - and is a real reading,
-    not an unknown. The unit is whatever the API quotes (c/kW for the sites
-    seen so far) rather than assumed, since networks bill demand differently.
-    Goes unavailable with the prices: it describes the interval in progress.
+    This is the figure the demand charge is based on, in the unit the network
+    bills in (kW for the sites seen so far; kVA for some). It is whatever
+    Localvolts' overnight reconciliation has settled on, so it can lag the
+    meter by a day and has been seen revised either way: their running
+    figure for the month, not a live reading. Zero in a month the tariff
+    doesn't track. A property of the month rather than of the interval in
+    progress, so it stays available as long as a demand record has arrived,
+    rather than going unavailable with the prices.
+
+    The forward-looking flex values ride along as attributes: `flexDemandUp`
+    is Localvolts' estimate, from a forecast of this household's load, of
+    what one more unit of demand right now would add to the charge, 0 outside
+    a demand window.
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Demand flex up"
+    _attr_name = "Max demand"
     _attr_icon = "mdi:gauge"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: LocalvoltsDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.nmi_id}_demand_flex_up"
+        self._attr_unique_id = f"{coordinator.nmi_id}_max_demand"
 
     @property
     def available(self) -> bool:
-        return super().available and self.coordinator.demand is not None
+        demand = self.coordinator.demand
+        return demand is not None and demand.max_demand is not None
 
     @property
     def native_unit_of_measurement(self):
         demand = self.coordinator.demand
-        return demand.units if demand else None
+        return demand.demand_units if demand else None
 
     @property
     def native_value(self):
         demand = self.coordinator.demand
-        return demand.flex_up if demand else None
+        return demand.max_demand if demand else None
 
     @property
     def extra_state_attributes(self):
@@ -336,9 +345,9 @@ class LocalvoltsDemandFlexUpSensor(LocalvoltsEntity):
         if not demand:
             return {}
         return {
+            "flexDemandUp": demand.flex_up,
             "flexDemandDown": demand.flex_down,
-            "maxDemand": demand.max_demand,
-            "demandUnits": demand.demand_units,
+            "flexDemandUnits": demand.units,
             "intervalEnd": demand.interval_end.isoformat(),
             "quality": demand.quality,
         }

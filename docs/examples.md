@@ -18,11 +18,11 @@ template:
         icon: mdi:clock
 ```
 
-**"Would more load right now cost me a demand charge?"** - that is what `Demand flex up` answers directly. It is 0 whenever the answer is no, including in months the tariff doesn't track, so `states('sensor.localvolts_<nmi>_demand_flex_up') | float(0) > 0` is the condition.
+**"Would more load right now cost me a demand charge?"** - that is what the `flexDemandUp` attribute of `Max demand` answers. It is 0 whenever the answer is no, including in months the tariff doesn't track, so `state_attr('sensor.localvolts_<nmi>_max_demand', 'flexDemandUp') | float(0) > 0` is the condition.
 
 ## The true cost of one more kilowatt
 
-The energy price (`costsFlexUp`, $/kWh) and the demand cost (`Demand flex up`, c/kW) are different kinds of cost in different units, and Localvolts deliberately publish them separately. For one extra kW during one 5-minute interval:
+The energy price (`costsFlexUp`, $/kWh) and the demand cost (`flexDemandUp` on `Max demand`, c/kW) are different kinds of cost in different units, and Localvolts deliberately publish them separately. For one extra kW during one 5-minute interval:
 
 - energy: `costsFlexUp` × 1/12 kWh
 - demand: `flexDemandUp` × 1 kW
@@ -38,10 +38,10 @@ template:
         state_class: measurement
         state: >
           {% set e = states('sensor.costsflexup') | float(none) %}
-          {% set d = states('sensor.localvolts_<nmi>_demand_flex_up') | float(none) %}
+          {% set d = state_attr('sensor.localvolts_<nmi>_max_demand', 'flexDemandUp') | float(none) %}
           {{ (e + 0.12 * d) | round(3) if e is not none and d is not none else none }}
         availability: >
-          {{ has_value('sensor.costsflexup') and has_value('sensor.localvolts_<nmi>_demand_flex_up') }}
+          {{ has_value('sensor.costsflexup') and state_attr('sensor.localvolts_<nmi>_max_demand', 'flexDemandUp') is not none }}
 ```
 
 The `0.12` converts c/kW per interval to $/kWh (×12 intervals per hour, ÷100 cents). It is exact for "should this one interval carry an extra kW". It overstates for a sustained addition: the demand cost is paid once when the peak is set, not again for every interval held at that level, and the API reasons from yesterday's settled peak, so read it as the cost of the first interval at a new level rather than summing it over an hour.

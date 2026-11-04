@@ -8,7 +8,7 @@ Home Assistant 2026.9 changed how it generates IDs for new entities that belong 
 
 - Installations that existed before the sensors were attached to a device (version 0.9.0) keep their original IDs - `sensor.costsflexup`, `sensor.earningsflexup`, `sensor.datalag`, `sensor.intervalend`, `sensor.forecasted_costs_flex_up`. IDs are stored, so they never change on upgrade.
 - A fresh install on Home Assistant 2026.9 or later gets `sensor.localvolts_<nmi>_costsflexup` and so on.
-- The sensors added in 0.10.0 - Demand flex up, Import tariff, Export tariff, Network, Site - are named the modern way and are `sensor.localvolts_<nmi>_demand_flex_up`, `..._import_tariff`, `..._export_tariff`, `..._network`, `..._site` on every version.
+- The sensors added in 0.10.0 and after - Max demand, Import tariff, Export tariff, Network, Site - are named the modern way and are `sensor.localvolts_<nmi>_max_demand`, `..._import_tariff`, `..._export_tariff`, `..._network`, `..._site` on every version.
 
 **Removing and re-adding.** Home Assistant remembers deleted entities for 30 days. Remove the integration and add it back within that time and every entity gets its original ID, name and history back. After 30 days it generates new IDs and the old history is left under the old ones; renaming an entity back to its original ID (Settings → Entities → the entity → Entity ID) reattaches it. The log will warn that it "cannot migrate history because the new entity_id is already in use" - that refers to the few rows recorded under the interim ID, which are dropped; the original history is live again.
 
@@ -113,4 +113,4 @@ The integration's diagnostics download (device page → three dots → Download 
 
 ## API usage
 
-Per 5-minute interval: one request for the price (polling tightly only until it arrives), and one small request for demand flex after it has. Per day: one request for site metadata. Per hour: a history request only when a gap has been found. Interval prices come from Localvolts' v1 API; site metadata and demand flex from v2. Every request identifies itself with a `User-Agent` of `ha-localvolts/<version>`.
+Per 5-minute interval: one request for the price (polling tightly only until it arrives), and one small request for the demand figures after it has. Per day: one request for site metadata. Per hour: a history request only when a gap has been found. Interval prices come from Localvolts' v1 API; site metadata and demand flex from v2. Every request identifies itself with a `User-Agent` of `ha-localvolts/<version>`.

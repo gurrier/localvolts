@@ -29,7 +29,7 @@ One device per site, named `Localvolts <NMI>`, showing your network and tariff a
 | **costsFlexUp** | What one more kWh imported costs you, for the current 5-minute interval - including network fees and loss factors | $/kWh |
 | **earningsFlexUp** | What one more kWh exported earns you, for the current interval | $/kWh |
 | **Forecasted Costs Flex Up** | The import price for the *next* interval, with the full 24-hour forecast as its `forecast` attribute | c/kWh |
-| **Demand flex up** | What one more kW of demand would add to your demand charge right now. 0 when no demand charge applies | as billed, e.g. c/kW |
+| **Max demand** | The month's peak demand as Localvolts currently hold it - the figure your demand charge is based on. 0 in a month the tariff doesn't track. Its `flexDemandUp` attribute is what one more kW right now would add to the charge | as billed, e.g. kW |
 | **IntervalEnd** | When the current interval ends, with every field Localvolts publish for it as attributes | timestamp |
 | **DataLag** | How long after the interval started Localvolts published its price - typically 15-25 s | s |
 | **Import tariff**, **Export tariff**, **Network**, **Site** | What Localvolts know about your site: tariff codes, your distributor, your region, and more as attributes of Site. Export tariff appears only if your site has an export circuit | diagnostic |
@@ -44,7 +44,7 @@ Three things to know, and you can skip the rest of this page.
 
 **Prices are in $/kWh; the forecast is in c/kWh.** Comparing them in a template needs a factor of 100: `forecast / 100 < current`. The forecast keeps the API's unit because changing it would break every automation already reading it.
 
-**Demand flex is a cost per kW, not per kWh.** On a demand tariff you pay for the month's peak average demand inside a demand window. `Demand flex up` is Localvolts' estimate of what one more kW now would add to that charge: 0 outside the window or in a month the tariff doesn't track, rising as the month's peak comes within reach. Zero is a real reading. The peak it works from is as settled so far - your meter data reaches Localvolts the next morning - so treat it as the running target to stay under. To compare it with the energy price, the two combine as `costsFlexUp + 0.12 × flexDemandUp` in $/kWh for a single interval - [why, and a template](docs/examples.md#the-true-cost-of-one-more-kilowatt). On a tariff with no demand component it stays at 0.
+**Max demand is the month's peak, in kW.** On a demand tariff you pay for the month's peak average demand inside a demand window. `Max demand` is that peak as Localvolts currently hold it - the figure the demand charge is based on, in the unit your network bills in - and 0 in a month the tariff doesn't track. It is set by Localvolts' overnight reconciliation of your meter data, so it can lag a day and has been seen to be revised; treat it as their running figure rather than a live reading. Its `flexDemandUp` attribute is Localvolts' estimate, from a forecast of your load, of what one more kW right now would add to the charge: 0 outside the window, rising as the peak comes within reach. To compare that with the energy price, the two combine as `costsFlexUp + 0.12 × flexDemandUp` in $/kWh for a single interval - [why, and a template](docs/examples.md#the-true-cost-of-one-more-kilowatt).
 
 ## Keeping the record straight
 
