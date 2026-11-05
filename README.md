@@ -168,3 +168,7 @@ Settings → Devices & Services → Localvolts → three dots → **Delete**, th
 ---
 
 More depth, when you want it: [docs/details.md](docs/details.md) covers the full forecast record, the outage log message, entity IDs and history, and exactly how the statistics repair decides what to rewrite.
+
+## Licence
+
+GPL-3.0-only. Copyright 2024-2026 [gurrier](https://github.com/gurrier). The full text is in [LICENSE](LICENSE).
