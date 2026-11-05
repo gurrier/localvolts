@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2024-2026 gurrier <https://github.com/gurrier>
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-only
 """Demand flex: what another unit of demand right now would cost.
 
 Many network tariffs charge for the month's peak average demand, measured

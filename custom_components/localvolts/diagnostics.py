@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2024-2026 gurrier <https://github.com/gurrier>
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-only
 """Diagnostics support for the Localvolts integration."""
 
 from __future__ import annotations
