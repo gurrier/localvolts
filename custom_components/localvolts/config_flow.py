@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024-2026 gurrier
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Config and options flows for the Localvolts integration."""
 
 import logging

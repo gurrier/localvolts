@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024-2026 gurrier
+# SPDX-License-Identifier: GPL-3.0-or-later
 """What Localvolts know about the site: network, tariff, meter provider.
 
 This comes from the v2 API's /customer/metadata call - the one v2 call the

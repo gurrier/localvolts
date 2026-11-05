@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024-2026 gurrier
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the Localvolts coordinator's scheduling and parsing logic.
 
 Home Assistant isn't installed here - the handful of modules the coordinator

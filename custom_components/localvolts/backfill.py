@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024-2026 gurrier
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Repair hours of price statistics that Home Assistant never recorded.
 
 Home Assistant compiles an hourly statistic from the twelve 5-minute windows
